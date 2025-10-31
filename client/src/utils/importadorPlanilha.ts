@@ -146,6 +146,25 @@ export function normalizarData(data: any): Date {
 }
 
 /**
+ * Identifica tipo de ganho baseado em TIPO_GANHO_DETALHE
+ */
+export function identificarTipoGanho(tipoGanho: string): import('../types/certification').TipoGanho {
+  const tipoLower = tipoGanho?.toLowerCase() || '';
+
+  if (tipoLower.includes('ganho')) {
+    return 'GANHO';
+  }
+  if (tipoLower.includes('perda')) {
+    return 'PERDA';
+  }
+  if (tipoLower.includes('migra')) {
+    return 'MIGRACAO';
+  }
+
+  return 'GANHO'; // Default
+}
+
+/**
  * Identifica tipo de venda/migração
  */
 export function identificarTipoVenda(tipo: string): TipoVenda {
@@ -162,7 +181,7 @@ export function identificarTipoVenda(tipo: string): TipoVenda {
  * Identifica área de atuação
  */
 export function identificarAreaAtuacao(area: string): AreaAtuacao {
-  const areaLower = area.toLowerCase();
+  const areaLower = area?.toLowerCase() || '';
 
   if (areaLower.includes('fora') || areaLower.includes('externa')) {
     return 'FORA';
@@ -172,21 +191,58 @@ export function identificarAreaAtuacao(area: string): AreaAtuacao {
 }
 
 /**
- * Interface para mapeamento de colunas da planilha
+ * Interface para mapeamento de colunas específicas por torre
  */
 export interface MapeamentoColunas {
-  dataAtivacao: string;
-  valorBruto: string;
-  tipo: string;
-  parceiro: string;
-  produto: string;
-  cnpj: string;
-  cliente: string;
-  area?: string; // Opcional
+  torre: import('../types/certification').TorrePlanilha;
+  dataRFS: string; // DT_RFS
+  valorBrutoSN: string; // VL_BRUTO_SN
+  produto: string; // DS_PRODUTO
+  tipoGanhoDetalhe?: string; // TIPO_GANHO_DETALHE (obrigatório para Avançados)
+  cnpj?: string;
+  cliente?: string;
+  parceiro?: string;
+  area?: string;
 }
 
 /**
- * Importa dados de uma planilha Excel
+ * Mapeamentos padrão para cada torre
+ */
+export const MAPEAMENTOS_PADRAO: Record<import('../types/certification').TorrePlanilha, MapeamentoColunas> = {
+  AVANCADOS: {
+    torre: 'AVANCADOS',
+    dataRFS: 'DT_RFS',
+    valorBrutoSN: 'VL_BRUTO_SN',
+    produto: 'DS_PRODUTO',
+    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
+    cnpj: 'CNPJ',
+    cliente: 'CLIENTE',
+    parceiro: 'PARCEIRO'
+  },
+  TI_GUD: {
+    torre: 'TI_GUD',
+    dataRFS: 'DT_RFS',
+    valorBrutoSN: 'VL_BRUTO_SN',
+    produto: 'DS_PRODUTO',
+    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
+    cnpj: 'CNPJ',
+    cliente: 'CLIENTE',
+    parceiro: 'PARCEIRO'
+  },
+  TECH: {
+    torre: 'TECH',
+    dataRFS: 'DT_RFS',
+    valorBrutoSN: 'VL_BRUTO_SN',
+    produto: 'DS_PRODUTO',
+    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
+    cnpj: 'CNPJ',
+    cliente: 'CLIENTE',
+    parceiro: 'PARCEIRO'
+  }
+};
+
+/**
+ * Importa dados de uma planilha Excel com base na torre específica
  */
 export function importarPlanilhaExcel(
   arquivo: File,
@@ -207,36 +263,62 @@ export function importarPlanilhaExcel(
         // Converte para JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        // Processa cada linha
-        const vendas: RegistroVenda[] = jsonData.map((row: any, index) => {
-          const id = `venda-${Date.now()}-${index}`;
+        // Processa cada linha aplicando as regras corretas
+        const vendas = jsonData
+          .map((row: any, index): RegistroVenda | null => {
+            const id = `venda-${mapeamento.torre}-${Date.now()}-${index}`;
 
-          // Extrai dados baseado no mapeamento
-          const dataAtivacao = normalizarData(row[mapeamento.dataAtivacao]);
-          const valorBrutoSN = normalizarValor(row[mapeamento.valorBruto]);
-          const tipoVenda = identificarTipoVenda(row[mapeamento.tipo] || 'VENDA');
-          const parceiro = identificarParceiro(row[mapeamento.parceiro] || '');
-          const produto = row[mapeamento.produto] || 'Produto não especificado';
-          const categoria = identificarCategoriaProduto(produto);
-          const cnpj = row[mapeamento.cnpj] || '';
-          const nomeCliente = row[mapeamento.cliente] || 'Cliente não especificado';
-          const areaAtuacao = mapeamento.area
-            ? identificarAreaAtuacao(row[mapeamento.area] || 'DENTRO')
-            : 'DENTRO';
+            // Extrai dados obrigatórios
+            const dataAtivacao = normalizarData(row[mapeamento.dataRFS]);
+            const produto = row[mapeamento.produto] || '';
 
-          return {
-            id,
-            dataAtivacao,
-            valorBrutoSN,
-            tipoVenda,
-            parceiro,
-            produto,
-            categoria,
-            cnpj,
-            nomeCliente,
-            areaAtuacao
-          };
-        });
+            // Se não houver produto, ignora a linha
+            if (!produto) return null;
+
+            // Extrai TIPO_GANHO_DETALHE
+            const tipoGanhoRaw = mapeamento.tipoGanhoDetalhe
+              ? row[mapeamento.tipoGanhoDetalhe]
+              : '';
+            const tipoGanho = identificarTipoGanho(tipoGanhoRaw);
+
+            // REGRA IMPORTANTE: Só considera receita se TIPO_GANHO_DETALHE for "GANHO"
+            let valorBrutoSN = 0;
+            if (tipoGanho === 'GANHO') {
+              valorBrutoSN = normalizarValor(row[mapeamento.valorBrutoSN]);
+            }
+
+            // Determina tipo de venda baseado no tipoGanho
+            const tipoVenda: TipoVenda = tipoGanho === 'MIGRACAO' ? 'MIGRACAO' : 'VENDA';
+
+            // Dados opcionais
+            const parceiro = mapeamento.parceiro
+              ? identificarParceiro(row[mapeamento.parceiro] || '')
+              : 'JCL';
+            const cnpj = mapeamento.cnpj ? row[mapeamento.cnpj] || '' : '';
+            const nomeCliente = mapeamento.cliente ? row[mapeamento.cliente] || 'Cliente não especificado' : 'Cliente não especificado';
+            const areaAtuacao = mapeamento.area
+              ? identificarAreaAtuacao(row[mapeamento.area] || 'DENTRO')
+              : 'DENTRO';
+
+            // Identifica categoria baseada na torre e produto
+            const categoria = identificarCategoriaProduto(produto);
+
+            return {
+              id,
+              dataAtivacao,
+              valorBrutoSN,
+              tipoVenda,
+              tipoGanho,
+              parceiro,
+              produto,
+              categoria,
+              cnpj,
+              nomeCliente,
+              areaAtuacao,
+              torre: mapeamento.torre
+            };
+          })
+          .filter((venda): venda is RegistroVenda => venda !== null); // Remove nulls
 
         resolve(vendas);
       } catch (error) {

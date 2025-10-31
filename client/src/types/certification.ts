@@ -104,18 +104,25 @@ export const PESOS_RECEITA_ALTAS: PesosIndicadores = {
   digitalTI: 0.20
 };
 
+// Tipos específicos para cada torre
+export type TorrePlanilha = 'AVANCADOS' | 'TI_GUD' | 'TECH';
+
+export type TipoGanho = 'GANHO' | 'PERDA' | 'MIGRACAO';
+
 // Registro de venda/ativação
 export interface RegistroVenda {
   id: string;
-  dataAtivacao: Date;
-  valorBrutoSN: number;
+  dataAtivacao: Date; // DT_RFS
+  valorBrutoSN: number; // VL_BRUTO_SN
   tipoVenda: TipoVenda;
+  tipoGanho?: TipoGanho; // TIPO_GANHO_DETALHE
   parceiro: ParceiroVivo;
   areaAtuacao: AreaAtuacao;
   categoria: 'DADOS_AVANCADOS' | 'VOZ_AVANCADA' | 'DIGITAL_TI' | 'NOVOS_PRODUTOS' | 'LOCACAO_EQUIPAMENTOS' | 'LICENCAS';
-  produto: string;
+  produto: string; // DS_PRODUTO
   cnpj: string;
   nomeCliente: string;
+  torre: TorrePlanilha;
 }
 
 // Resultado de cálculo mensal

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle } from 'lucide-react';
-import type { RegistroVenda } from '../types/certification';
-import { importarPlanilhaExcel, validarArquivoExcel, type MapeamentoColunas } from '../utils/importadorPlanilha';
+import type { RegistroVenda, TorrePlanilha } from '../types/certification';
+import { importarPlanilhaExcel, validarArquivoExcel, MAPEAMENTOS_PADRAO } from '../utils/importadorPlanilha';
 import './ImportadorPlanilhas.css';
 
 interface ImportadorPlanilhasProps {
@@ -10,6 +10,7 @@ interface ImportadorPlanilhasProps {
 
 export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPlanilhasProps) {
   const [arquivo, setArquivo] = useState<File | null>(null);
+  const [torreSelecionada, setTorreSelecionada] = useState<TorrePlanilha>('AVANCADOS');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
@@ -35,17 +36,8 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
     setSucesso(false);
 
     try {
-      // Mapeamento padrão das colunas (ajuste conforme suas planilhas)
-      const mapeamento: MapeamentoColunas = {
-        dataAtivacao: 'Data Ativação',
-        valorBruto: 'Valor Bruto SN',
-        tipo: 'Tipo',
-        parceiro: 'Parceiro',
-        produto: 'Produto',
-        cnpj: 'CNPJ',
-        cliente: 'Cliente',
-        area: 'Área'
-      };
+      // Usa o mapeamento padrão para a torre selecionada
+      const mapeamento = MAPEAMENTOS_PADRAO[torreSelecionada];
 
       const vendas = await importarPlanilhaExcel(arquivo, mapeamento);
       onVendasImportadas(vendas);
@@ -70,6 +62,24 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
           <FileSpreadsheet size={32} className="header-icon" />
           <h2>Importar Planilhas</h2>
           <p>Faça upload das planilhas de ativação para processar automaticamente</p>
+        </div>
+
+        {/* Seletor de Torre */}
+        <div className="torre-selector">
+          <label htmlFor="torre-select">Selecione a Torre/Planilha:</label>
+          <select
+            id="torre-select"
+            className="select"
+            value={torreSelecionada}
+            onChange={(e) => setTorreSelecionada(e.target.value as TorrePlanilha)}
+          >
+            <option value="AVANCADOS">Avançados (Dados/Voz)</option>
+            <option value="TI_GUD">TI / GUD</option>
+            <option value="TECH">Tech</option>
+          </select>
+          <p className="torre-hint">
+            Cada torre possui colunas específicas. Selecione a torre correspondente à sua planilha.
+          </p>
         </div>
 
         <div className="upload-area">
@@ -121,17 +131,28 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
         </div>
 
         <div className="importador-info glass-card">
-          <h3>Colunas Esperadas na Planilha</h3>
+          <h3>Colunas Esperadas - Torre {torreSelecionada === 'AVANCADOS' ? 'Avançados' : torreSelecionada === 'TI_GUD' ? 'TI/GUD' : 'Tech'}</h3>
           <ul>
-            <li><strong>Data Ativação:</strong> Data de ativação do serviço</li>
-            <li><strong>Valor Bruto SN:</strong> Valor bruto sem desconto</li>
-            <li><strong>Tipo:</strong> Venda ou Migração</li>
-            <li><strong>Parceiro:</strong> JCL, TECH ou SAFE TI</li>
-            <li><strong>Produto:</strong> Nome do produto/serviço</li>
-            <li><strong>CNPJ:</strong> CNPJ do cliente</li>
-            <li><strong>Cliente:</strong> Nome do cliente</li>
-            <li><strong>Área:</strong> Dentro ou Fora (opcional)</li>
+            <li><strong>DT_RFS:</strong> Data de referência do serviço (mês da competência)</li>
+            <li><strong>DS_PRODUTO:</strong> Descrição/nome do produto ou serviço</li>
+            <li><strong>VL_BRUTO_SN:</strong> Valor bruto sem desconto</li>
+            <li><strong>TIPO_GANHO_DETALHE:</strong> Tipo do movimento (GANHO, PERDA ou MIGRAÇÃO)</li>
           </ul>
+
+          <div className="regra-importante">
+            <strong>⚠️ Regra Importante:</strong>
+            <p>Somente serão contabilizados registros onde <strong>TIPO_GANHO_DETALHE = "GANHO"</strong></p>
+            <p>Migrações e Perdas não computam receita para a certificação</p>
+          </div>
+
+          <div className="colunas-opcionais">
+            <h4>Colunas Opcionais:</h4>
+            <ul>
+              <li>CNPJ</li>
+              <li>CLIENTE</li>
+              <li>PARCEIRO</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
