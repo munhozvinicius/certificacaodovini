@@ -1,0 +1,126 @@
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  padding: var(--spacing-lg);
+}
+
+.dashboard-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: var(--spacing-xl);
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-2xl);
+  max-width: 500px;
+}
+
+.empty-icon {
+  color: var(--color-gray-600);
+  margin-bottom: var(--spacing-xl);
+}
+
+.empty-state h2 {
+  color: var(--color-gray-300);
+  margin-bottom: var(--spacing-md);
+}
+
+.empty-state p {
+  color: var(--color-gray-500);
+  margin-bottom: var(--spacing-xl);
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.summary-card {
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-primary-light);
+}
+
+.card-header h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-gray-400);
+}
+
+.card-value {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.card-footer {
+  font-size: 0.85rem;
+  color: var(--color-gray-500);
+}
+
+.monthly-results {
+  padding: var(--spacing-xl);
+}
+
+.monthly-results h3 {
+  color: var(--color-primary-light);
+  margin-bottom: var(--spacing-lg);
+  font-size: 1.3rem;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th {
+  text-align: left;
+  padding: var(--spacing-md);
+  color: var(--color-gray-400);
+  font-weight: 600;
+  font-size: 0.9rem;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+}
+
+.results-table td {
+  padding: var(--spacing-md);
+  color: var(--color-gray-300);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.results-table tbody tr:hover {
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.points-cell {
+  font-weight: 700;
+  color: var(--color-primary-light);
+}
+
+@media (max-width: 768px) {
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .card-value {
+    font-size: 1.5rem;
+  }
+}
