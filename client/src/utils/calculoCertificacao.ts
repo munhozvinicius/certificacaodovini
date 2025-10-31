@@ -1,18 +1,20 @@
-import {
+import type {
   Classificacao,
-  CLASSIFICACOES,
   FaixaReceita,
-  FAIXAS_DADOS_AVANCADOS,
-  FAIXAS_VOZ_AVANCADA,
-  FAIXAS_DIGITAL_TI,
-  FAIXAS_NOVOS_PRODUTOS,
-  FAIXAS_LOCACAO_EQUIPAMENTOS,
-  FAIXAS_LICENCAS,
   RegistroVenda,
   ResultadoMensal,
   ResultadoCiclo,
   SimuladorParametros,
   SimuladorResultado
+} from '../types/certification';
+import {
+  CLASSIFICACOES,
+  FAIXAS_DADOS_AVANCADOS,
+  FAIXAS_VOZ_AVANCADA,
+  FAIXAS_DIGITAL_TI,
+  FAIXAS_NOVOS_PRODUTOS,
+  FAIXAS_LOCACAO_EQUIPAMENTOS,
+  FAIXAS_LICENCAS
 } from '../types/certification';
 
 /**
@@ -134,7 +136,7 @@ export function calcularPontuacaoMensal(
   pontosDadosAvancados: number;
   pontosVozAvancada: number;
   pontosDigitalTI: number;
-  pontosNovos Produtos: number;
+  pontosNovosProdutos: number;
   pontosLocacaoEquipamentos: number;
   pontosLicencas: number;
   pontosTotal: number;

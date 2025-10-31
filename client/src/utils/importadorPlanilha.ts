@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { RegistroVenda, TipoVenda, ParceiroVivo, AreaAtuacao } from '../types/certification';
+import type { RegistroVenda, TipoVenda, ParceiroVivo, AreaAtuacao } from '../types/certification';
 
 /**
  * Identifica a categoria do produto baseado no nome

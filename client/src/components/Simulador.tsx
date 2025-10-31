@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Target, TrendingUp, AlertCircle } from 'lucide-react';
-import { ResultadoCiclo, CLASSIFICACOES } from '../types/certification';
+import type { ResultadoCiclo } from '../types/certification';
+import { CLASSIFICACOES } from '../types/certification';
 import { simularMeta, getNomeClassificacao, formatarMoeda, formatarPontuacao } from '../utils/calculoCertificacao';
 import './Simulador.css';
 

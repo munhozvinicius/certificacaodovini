@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Upload, TrendingUp, Award, Target, FileSpreadsheet, Info } from 'lucide-react';
-import { RegistroVenda, ResultadoCiclo } from './types/certification';
+import { TrendingUp, Award, Target, FileSpreadsheet, Info } from 'lucide-react';
+import type { RegistroVenda, ResultadoCiclo } from './types/certification';
 import { calcularResultadoCiclo } from './utils/calculoCertificacao';
-import { importarPlanilhaExcel, MapeamentoColunas, validarArquivoExcel } from './utils/importadorPlanilha';
 import Dashboard from './components/Dashboard';
 import ImportadorPlanilhas from './components/ImportadorPlanilhas';
 import Simulador from './components/Simulador';

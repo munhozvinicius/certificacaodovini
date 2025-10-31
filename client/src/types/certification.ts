@@ -125,13 +125,13 @@ export interface ResultadoMensal {
   receitaDadosAvancados: number;
   receitaVozAvancada: number;
   receitaDigitalTI: number;
-  receitaNovosP rodutos: number;
+  receitaNovosProdutos: number;
   receitaLocacaoEquipamentos: number;
   receitaLicencas: number;
   pontosDadosAvancados: number;
   pontosVozAvancada: number;
   pontosDigitalTI: number;
-  pontosNovos Produtos: number;
+  pontosNovosProdutos: number;
   pontosLocacaoEquipamentos: number;
   pontosLicencas: number;
   pontosTotal: number;

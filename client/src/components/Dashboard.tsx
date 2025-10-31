@@ -1,4 +1,4 @@
-import { ResultadoCiclo, RegistroVenda } from '../types/certification';
+import type { ResultadoCiclo, RegistroVenda } from '../types/certification';
 import { getNomeClassificacao, formatarMoeda, formatarPontuacao } from '../utils/calculoCertificacao';
 import { TrendingUp, DollarSign, Award, Calendar, BarChart3, AlertCircle } from 'lucide-react';
 import './Dashboard.css';
@@ -13,7 +13,7 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     return (
       <div className="dashboard-empty fade-in">
         <div className="empty-state glass-card">
-          <Alert Circle size={64} className="empty-icon" />
+          <AlertCircle size={64} className="empty-icon" />
           <h2>Nenhum Dado Disponível</h2>
           <p>Importe suas planilhas para visualizar o dashboard de performance</p>
           <button className="btn btn-primary">

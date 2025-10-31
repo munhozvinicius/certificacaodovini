@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle } from 'lucide-react';
-import { RegistroVenda } from '../types/certification';
-import { importarPlanilhaExcel, validarArquivoExcel, MapeamentoColunas } from '../utils/importadorPlanilha';
+import type { RegistroVenda } from '../types/certification';
+import { importarPlanilhaExcel, validarArquivoExcel, type MapeamentoColunas } from '../utils/importadorPlanilha';
 import './ImportadorPlanilhas.css';
 
 interface ImportadorPlanilhasProps {
