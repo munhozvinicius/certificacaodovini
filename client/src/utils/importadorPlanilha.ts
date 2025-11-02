@@ -332,12 +332,17 @@ export function importarPlanilhaExcel(
           const pedidoSN = row.PEDIDO_SN;
           const produto = row.DS_PRODUTO || '';
           const tipoSolicitacao = row.TP_SOLICITACAO || '';
+          const cliente = row.NM_CLIENTE || '';
+          const valorBruto = row.VL_BRUTO_SN || 0;
 
           // Se não houver produto ou pedido, ignora
           if (!produto || !pedidoSN) return;
 
           // Se já foi processado como parte de um grupo, pula
-          if (pedidosProcessados.has(pedidoSN)) return;
+          if (pedidosProcessados.has(pedidoSN)) {
+            console.log(`[SKIP] Pedido ${pedidoSN} já processado (agrupamento IP)`);
+            return;
+          }
 
           // Verifica se é IP Dedicado (pedido principal)
           if (gruposIPDedicado.has(pedidoSN)) {
@@ -349,8 +354,14 @@ export function importarPlanilhaExcel(
             // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
             if (!tipoSolicitacao.toLowerCase().includes('venda') ||
                 tipoSolicitacao.toLowerCase().includes('migra')) {
+              console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
               return; // Pula migrações
             }
+
+            console.log(`[GRUPO IP] Cliente: ${grupo.cliente}, Pedidos: ${grupo.pedidosRelacionados.length}, Valor Total: R$ ${grupo.valorTotal.toFixed(2)}`);
+            grupo.pedidosRelacionados.forEach(p => {
+              console.log(`  → ${p.pedidoSN}: ${p.produto} = R$ ${p.valor.toFixed(2)}`);
+            });
 
             // Cria registro agrupado
             vendas.push({
@@ -377,14 +388,18 @@ export function importarPlanilhaExcel(
             // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
             if (!tipoSolicitacao.toLowerCase().includes('venda') ||
                 tipoSolicitacao.toLowerCase().includes('migra')) {
+              console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
               return; // Pula migrações
             }
+
+            const valorNormalizado = normalizarValor(valorBruto);
+            console.log(`[VENDA] Cliente: ${cliente}, Pedido: ${pedidoSN}, Produto: ${produto}, Valor: R$ ${valorNormalizado.toFixed(2)}`);
 
             vendas.push({
               id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
               pedidoSN,
               dataAtivacao: normalizarData(row.DT_RFB),
-              valorBrutoSN: normalizarValor(row.VL_BRUTO_SN || 0),
+              valorBrutoSN: valorNormalizado,
               tipoVenda: identificarTipoVenda(tipoSolicitacao),
               tipoSolicitacao,
               parceiro: identificarParceiro(row.NM_REDE || ''),
@@ -397,8 +412,13 @@ export function importarPlanilhaExcel(
               areaAtuacao: 'DENTRO',
               torre: mapeamento.torre
             });
+          } else {
+            console.log(`[SKIP] Pedido ${pedidoSN} - Produto relacionado a IP mas não é principal: ${produto}`);
           }
         });
+
+        console.log(`\n[RESUMO] Total de vendas processadas: ${vendas.length}`);
+        console.log(`[RESUMO] Receita total: R$ ${vendas.reduce((acc, v) => acc + v.valorBrutoSN, 0).toFixed(2)}`);
 
         resolve(vendas);
       } catch (error) {
