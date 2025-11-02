@@ -91,6 +91,7 @@ function getMesNome(mes: number): string {
 
 export default function Dashboard({ resultado, vendas }: DashboardProps) {
   const [mesExpandido, setMesExpandido] = useState<number | null>(null);
+  const [parceiroFiltro, setParceiroFiltro] = useState<'TODOS' | 'SAFE_TI' | 'TECH'>('TODOS');
   const [produtoSelecionado, setProdutoSelecionado] = useState<{
     mes: number;
     categoria: string;
@@ -115,11 +116,17 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
 
   const { classificacao, bonusPercentual, pontuacaoMedia, resultadosMensais } = resultado;
 
-  // Calcula receita total
-  const receitaTotal = resultadosMensais.reduce((acc, r) =>
-    acc + r.receitaDadosAvancados + r.receitaVozAvancada + r.receitaDigitalTI +
-    r.receitaNovosProdutos + r.receitaLocacaoEquipamentos + r.receitaLicencas, 0
-  );
+  // Filtra vendas por parceiro
+  const vendasFiltradas = parceiroFiltro === 'TODOS'
+    ? vendas
+    : vendas.filter(v => v.parceiro === parceiroFiltro);
+
+  // Conta vendas por parceiro
+  const vendasSafeTI = vendas.filter(v => v.parceiro === 'SAFE_TI').length;
+  const vendasTech = vendas.filter(v => v.parceiro === 'TECH').length;
+
+  // Calcula receita total (filtrada)
+  const receitaTotal = vendasFiltradas.reduce((acc, v) => acc + v.valorBrutoSN, 0);
 
   // Encontra próxima classificação
   const classificacaoAtualIndex = CLASSIFICACOES.findIndex(c => c.classificacao === classificacao);
@@ -127,9 +134,9 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     ? CLASSIFICACOES[classificacaoAtualIndex + 1]
     : null;
 
-  // Função para pegar pedidos por categoria e mês
+  // Função para pegar pedidos por categoria e mês (com filtro de parceiro)
   const getPedidosPorCategoria = (mes: number, categoria: string) => {
-    return vendas.filter(v => {
+    return vendasFiltradas.filter(v => {
       const vMes = v.dataAtivacao.getMonth() + 1;
       const vAno = v.dataAtivacao.getFullYear();
       const resultadoMes = resultadosMensais.find(r => r.mes === mes && r.ano === vAno);
@@ -149,6 +156,30 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
           <div>
             <h2>Certificação Especialista Vivo</h2>
             <p>Período: Julho/2025 - Dezembro/2025 (2º Ciclo)</p>
+          </div>
+        </div>
+
+        <div className="partner-filter">
+          <label>Parceiro:</label>
+          <div className="filter-buttons">
+            <button
+              className={`filter-btn ${parceiroFiltro === 'TODOS' ? 'active' : ''}`}
+              onClick={() => setParceiroFiltro('TODOS')}
+            >
+              Todos ({vendas.length})
+            </button>
+            <button
+              className={`filter-btn ${parceiroFiltro === 'SAFE_TI' ? 'active' : ''}`}
+              onClick={() => setParceiroFiltro('SAFE_TI')}
+            >
+              SAFE-TI ({vendasSafeTI})
+            </button>
+            <button
+              className={`filter-btn ${parceiroFiltro === 'TECH' ? 'active' : ''}`}
+              onClick={() => setParceiroFiltro('TECH')}
+            >
+              JLC TECH ({vendasTech})
+            </button>
           </div>
         </div>
       </div>
@@ -196,7 +227,7 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
           <div className="card-value text-gradient">
             {formatarMoeda(receitaTotal)}
           </div>
-          <div className="card-footer">{vendas.length} vendas</div>
+          <div className="card-footer">{vendasFiltradas.length} vendas</div>
         </div>
       </div>
 

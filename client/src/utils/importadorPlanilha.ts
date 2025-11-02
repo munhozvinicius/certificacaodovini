@@ -78,16 +78,43 @@ export function identificarCategoriaProduto(produto: string):
 }
 
 /**
- * Identifica o parceiro Vivo baseado no texto
+ * Identifica o parceiro Vivo baseado no texto de NM_REDE
  */
 export function identificarParceiro(parceiro: string): ParceiroVivo {
-  const parceiroLower = parceiro.toLowerCase();
+  const parceiroUpper = parceiro.toUpperCase().trim();
 
-  if (parceiroLower.includes('jcl')) return 'JCL';
-  if (parceiroLower.includes('tech')) return 'TECH';
-  if (parceiroLower.includes('safe') || parceiroLower.includes('ti')) return 'SAFE_TI';
+  // SAFE-TI ou SAFE TI
+  if (parceiroUpper.includes('SAFE')) return 'SAFE_TI';
 
-  return 'JCL'; // Default
+  // JLC TECH (corrigido - estava como JCL)
+  if (parceiroUpper.includes('JLC') || parceiroUpper.includes('TECH')) return 'TECH';
+
+  return 'SAFE_TI'; // Default
+}
+
+/**
+ * Normaliza CNPJ de diferentes formatos, incluindo notação científica do Excel
+ * Exemplo: 4,92681E+13 -> 49268125000196
+ */
+export function normalizarCNPJ(cnpj: any): string {
+  if (!cnpj) return '';
+
+  // Se for número (notação científica do Excel)
+  if (typeof cnpj === 'number') {
+    // Converte para string sem notação científica
+    const cnpjStr = cnpj.toFixed(0);
+    console.log(`[DEBUG] CNPJ científico: ${cnpj} → ${cnpjStr}`);
+    return cnpjStr.padStart(14, '0'); // CNPJ tem 14 dígitos
+  }
+
+  // Se for string
+  if (typeof cnpj === 'string') {
+    // Remove tudo que não é número
+    const apenasNumeros = cnpj.replace(/\D/g, '');
+    return apenasNumeros.padStart(14, '0');
+  }
+
+  return String(cnpj);
 }
 
 /**
@@ -251,7 +278,7 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
   linhas.forEach(linha => {
     const produto = linha.DS_PRODUTO?.toLowerCase() || '';
     const pedidoSN = linha.PEDIDO_SN;
-    const cnpj = linha.NR_CNPJ;
+    const cnpj = normalizarCNPJ(linha.NR_CNPJ);
 
     if (produto.includes('ip dedicado')) {
       grupos.set(pedidoSN, {
@@ -274,7 +301,7 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
   // Agrupa produtos relacionados (Monitora Dados e IP Internet)
   linhas.forEach(linha => {
     const produto = linha.DS_PRODUTO?.toLowerCase() || '';
-    const cnpj = linha.NR_CNPJ;
+    const cnpj = normalizarCNPJ(linha.NR_CNPJ);
     const pedidoSN = linha.PEDIDO_SN;
 
     if (produto.includes('monitora dados') || produto.includes('ip internet')) {
@@ -406,7 +433,7 @@ export function importarPlanilhaExcel(
               produto,
               tipoProduto: row.TP_PRODUTO || '',
               categoria: identificarCategoriaProduto(produto),
-              cnpj: row.NR_CNPJ,
+              cnpj: normalizarCNPJ(row.NR_CNPJ),
               nomeCliente: row.NM_CLIENTE,
               nomeRede: row.NM_REDE,
               areaAtuacao: 'DENTRO',
