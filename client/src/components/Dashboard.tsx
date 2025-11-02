@@ -125,6 +125,64 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
   const vendasSafeTI = vendas.filter(v => v.parceiro === 'SAFE_TI').length;
   const vendasTech = vendas.filter(v => v.parceiro === 'TECH').length;
 
+  // Recalcula resultados mensais com vendas filtradas
+  const resultadosMensaisFiltrados = resultadosMensais.map(resMes => {
+    // Filtra vendas deste mês
+    const vendasDoMes = vendasFiltradas.filter(v => {
+      const vMes = v.dataAtivacao.getMonth() + 1;
+      const vAno = v.dataAtivacao.getFullYear();
+      return vMes === resMes.mes && vAno === resMes.ano;
+    });
+
+    // Recalcula receitas por categoria
+    const receitas = {
+      dadosAvancados: 0,
+      vozAvancada: 0,
+      digitalTI: 0,
+      novosProdutos: 0,
+      locacao: 0,
+      licencas: 0
+    };
+
+    vendasDoMes.forEach(v => {
+      const valor = v.valorBrutoSN;
+      switch (v.categoria) {
+        case 'DADOS_AVANCADOS': receitas.dadosAvancados += valor; break;
+        case 'VOZ_AVANCADA': receitas.vozAvancada += valor; break;
+        case 'DIGITAL_TI': receitas.digitalTI += valor; break;
+        case 'NOVOS_PRODUTOS': receitas.novosProdutos += valor; break;
+        case 'LOCACAO_EQUIPAMENTOS': receitas.locacao += valor; break;
+        case 'LICENCAS': receitas.licencas += valor; break;
+      }
+    });
+
+    // Recalcula pontos (usando as mesmas funções do cálculo original)
+    const pontosDadosAvancados = calcularPontosPorFaixa(receitas.dadosAvancados, FAIXAS_DADOS_AVANCADOS);
+    const pontosVozAvancada = calcularPontosPorFaixa(receitas.vozAvancada, FAIXAS_VOZ_AVANCADA);
+    const pontosDigitalTI = calcularPontosPorFaixa(receitas.digitalTI, FAIXAS_DIGITAL_TI);
+    const pontosNovosProdutos = calcularPontosPorFaixa(receitas.novosProdutos, FAIXAS_NOVOS_PRODUTOS);
+    const pontosLocacao = calcularPontosPorFaixa(receitas.locacao, FAIXAS_LOCACAO_EQUIPAMENTOS);
+    const pontosLicencas = calcularPontosPorFaixa(receitas.licencas, FAIXAS_LICENCAS);
+
+    return {
+      mes: resMes.mes,
+      ano: resMes.ano,
+      receitaDadosAvancados: receitas.dadosAvancados,
+      receitaVozAvancada: receitas.vozAvancada,
+      receitaDigitalTI: receitas.digitalTI,
+      receitaNovosProdutos: receitas.novosProdutos,
+      receitaLocacaoEquipamentos: receitas.locacao,
+      receitaLicencas: receitas.licencas,
+      pontosDadosAvancados,
+      pontosVozAvancada,
+      pontosDigitalTI,
+      pontosNovosProdutos,
+      pontosLocacaoEquipamentos: pontosLocacao,
+      pontosLicencas,
+      pontosTotal: pontosDadosAvancados + pontosVozAvancada + pontosDigitalTI + pontosNovosProdutos + pontosLocacao + pontosLicencas
+    };
+  });
+
   // Calcula receita total (filtrada)
   const receitaTotal = vendasFiltradas.reduce((acc, v) => acc + v.valorBrutoSN, 0);
 
@@ -135,16 +193,19 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     : null;
 
   // Função para pegar pedidos por categoria e mês (com filtro de parceiro)
-  const getPedidosPorCategoria = (mes: number, categoria: string) => {
-    return vendasFiltradas.filter(v => {
+  const getPedidosPorCategoria = (mes: number, ano: number, categoria: string) => {
+    console.log(`[GET PEDIDOS] Buscando pedidos - Mês: ${mes}, Ano: ${ano}, Categoria: ${categoria}, Parceiro: ${parceiroFiltro}`);
+    const pedidos = vendasFiltradas.filter(v => {
       const vMes = v.dataAtivacao.getMonth() + 1;
       const vAno = v.dataAtivacao.getFullYear();
-      const resultadoMes = resultadosMensais.find(r => r.mes === mes && r.ano === vAno);
-
-      if (!resultadoMes) return false;
-
-      return vMes === mes && v.categoria === categoria;
+      const match = vMes === mes && vAno === ano && v.categoria === categoria;
+      if (match) {
+        console.log(`  ✓ Match: ${v.nomeCliente} - ${v.produto} - R$ ${v.valorBrutoSN}`);
+      }
+      return match;
     });
+    console.log(`[GET PEDIDOS] Total encontrado: ${pedidos.length}`);
+    return pedidos;
   };
 
   return (
@@ -239,14 +300,14 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
         </h2>
 
         <div className="monthly-cards-grid">
-          {resultadosMensais.map((mes, idx) => (
+          {resultadosMensaisFiltrados.map((mes, idx) => (
             <MonthCard
               key={idx}
               mes={mes}
               isExpanded={mesExpandido === idx}
               onToggle={() => setMesExpandido(mesExpandido === idx ? null : idx)}
               onProductClick={(categoria) => {
-                const pedidos = getPedidosPorCategoria(mes.mes, categoria);
+                const pedidos = getPedidosPorCategoria(mes.mes, mes.ano, categoria);
                 setProdutoSelecionado({ mes: mes.mes, categoria, pedidos });
               }}
             />

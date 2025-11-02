@@ -22,14 +22,17 @@ export function identificarCategoriaProduto(produto: string):
     return 'DADOS_AVANCADOS';
   }
 
-  // Voz Avançada + VVN: VVN, SIP, NUM, DDR, 0800
+  // Voz Avançada + VVN: VVN, SIP, NUM, DDR, 0800, VIVOSIP
   if (
     produtoLower.includes('vvn') ||
     produtoLower.includes('sip') ||
+    produtoLower.includes('vivosip') ||
+    produtoLower.includes('vivo sip') ||
     produtoLower.includes('num') ||
     produtoLower.includes('ddr') ||
     produtoLower.includes('0800')
   ) {
+    console.log(`[CATEGORIA] "${produto}" → VOZ_AVANCADA`);
     return 'VOZ_AVANCADA';
   }
 
@@ -435,7 +438,8 @@ export function importarPlanilhaExcel(
             }
 
             const valorNormalizado = normalizarValor(valorBruto);
-            console.log(`[VENDA] Cliente: ${cliente}, Pedido: ${pedidoSN}, Produto: ${produto}, Valor: R$ ${valorNormalizado.toFixed(2)}`);
+            const categoria = identificarCategoriaProduto(produto);
+            console.log(`[VENDA] Cliente: ${cliente}, Pedido: ${pedidoSN}, Produto: ${produto}, Categoria: ${categoria}, Valor: R$ ${valorNormalizado.toFixed(2)}`);
 
             vendas.push({
               id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
@@ -447,7 +451,7 @@ export function importarPlanilhaExcel(
               parceiro: identificarParceiro(row.NM_REDE || ''),
               produto,
               tipoProduto: row.TP_PRODUTO || '',
-              categoria: identificarCategoriaProduto(produto),
+              categoria,
               cnpj: normalizarCNPJ(row.NR_CNPJ),
               nomeCliente: row.NM_CLIENTE,
               nomeRede: row.NM_REDE,
