@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ResultadoCiclo, RegistroVenda, FaixaReceita } from '../types/certification';
+import type { ResultadoCiclo, RegistroVenda, FaixaReceita, ResultadoMensal } from '../types/certification';
 import {
   getNomeClassificacao,
   formatarMoeda,
@@ -23,7 +23,11 @@ import {
   BarChart3,
   AlertCircle,
   ChevronRight,
-  Target
+  ChevronDown,
+  Target,
+  X,
+  Package,
+  FileText
 } from 'lucide-react';
 import './Dashboard.css';
 
@@ -48,7 +52,6 @@ function calcularInfoFaixa(receita: number, faixas: FaixaReceita[]): FaixaInfo {
   let faixaAtualObj: FaixaReceita | null = null;
   let proximaFaixa: FaixaReceita | null = null;
 
-  // Encontra faixa atual
   for (let i = 0; i < faixas.length; i++) {
     if (receita >= faixas[i].receitaMinima && receita < faixas[i].receitaMaxima) {
       faixaAtual = faixas[i].faixa;
@@ -60,20 +63,15 @@ function calcularInfoFaixa(receita: number, faixas: FaixaReceita[]): FaixaInfo {
     }
   }
 
-  // Se está na última faixa
   if (receita >= faixas[faixas.length - 1].receitaMinima) {
     faixaAtual = faixas[faixas.length - 1].faixa;
     faixaAtualObj = faixas[faixas.length - 1];
     proximaFaixa = null;
   }
 
-  const receitaParaProxima = proximaFaixa
-    ? proximaFaixa.receitaMinima - receita
-    : 0;
-
+  const receitaParaProxima = proximaFaixa ? proximaFaixa.receitaMinima - receita : 0;
   const percentualProgresso = faixaAtualObj
-    ? ((receita - faixaAtualObj.receitaMinima) /
-       (faixaAtualObj.receitaMaxima - faixaAtualObj.receitaMinima)) * 100
+    ? ((receita - faixaAtualObj.receitaMinima) / (faixaAtualObj.receitaMaxima - faixaAtualObj.receitaMinima)) * 100
     : 0;
 
   return {
@@ -87,16 +85,17 @@ function calcularInfoFaixa(receita: number, faixas: FaixaReceita[]): FaixaInfo {
 }
 
 function getMesNome(mes: number): string {
-  const meses = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril',
-    'Maio', 'Junho', 'Julho', 'Agosto',
-    'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   return meses[mes - 1];
 }
 
 export default function Dashboard({ resultado, vendas }: DashboardProps) {
-  const [mesSelecionado, setMesSelecionado] = useState<number>(0);
+  const [mesExpandido, setMesExpandido] = useState<number | null>(null);
+  const [produtoSelecionado, setProdutoSelecionado] = useState<{
+    mes: number;
+    categoria: string;
+    pedidos: RegistroVenda[];
+  } | null>(null);
 
   if (!resultado || vendas.length === 0) {
     return (
@@ -116,24 +115,11 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
 
   const { classificacao, bonusPercentual, pontuacaoMedia, resultadosMensais } = resultado;
 
-  // Pega resultado mensal selecionado ou último com dados
-  const resultadoMensal = mesSelecionado < resultadosMensais.length
-    ? resultadosMensais[mesSelecionado]
-    : resultadosMensais[resultadosMensais.length - 1];
-
   // Calcula receita total
   const receitaTotal = resultadosMensais.reduce((acc, r) =>
     acc + r.receitaDadosAvancados + r.receitaVozAvancada + r.receitaDigitalTI +
     r.receitaNovosProdutos + r.receitaLocacaoEquipamentos + r.receitaLicencas, 0
   );
-
-  // Calcula info de faixas para o mês selecionado
-  const infoDadosAvancados = calcularInfoFaixa(resultadoMensal.receitaDadosAvancados, FAIXAS_DADOS_AVANCADOS);
-  const infoVozAvancada = calcularInfoFaixa(resultadoMensal.receitaVozAvancada, FAIXAS_VOZ_AVANCADA);
-  const infoDigitalTI = calcularInfoFaixa(resultadoMensal.receitaDigitalTI, FAIXAS_DIGITAL_TI);
-  const infoNovosProdutos = calcularInfoFaixa(resultadoMensal.receitaNovosProdutos, FAIXAS_NOVOS_PRODUTOS);
-  const infoLocacao = calcularInfoFaixa(resultadoMensal.receitaLocacaoEquipamentos, FAIXAS_LOCACAO_EQUIPAMENTOS);
-  const infoLicencas = calcularInfoFaixa(resultadoMensal.receitaLicencas, FAIXAS_LICENCAS);
 
   // Encontra próxima classificação
   const classificacaoAtualIndex = CLASSIFICACOES.findIndex(c => c.classificacao === classificacao);
@@ -141,9 +127,22 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     ? CLASSIFICACOES[classificacaoAtualIndex + 1]
     : null;
 
+  // Função para pegar pedidos por categoria e mês
+  const getPedidosPorCategoria = (mes: number, categoria: string) => {
+    return vendas.filter(v => {
+      const vMes = v.dataAtivacao.getMonth() + 1;
+      const vAno = v.dataAtivacao.getFullYear();
+      const resultadoMes = resultadosMensais.find(r => r.mes === mes && r.ano === vAno);
+
+      if (!resultadoMes) return false;
+
+      return vMes === mes && v.categoria === categoria;
+    });
+  };
+
   return (
     <div className="dashboard-container fade-in">
-      {/* Header com período e seletor de mês */}
+      {/* Header */}
       <div className="dashboard-header glass-card">
         <div className="period-info">
           <Calendar size={32} />
@@ -152,20 +151,6 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
             <p>Período: Julho/2025 - Dezembro/2025 (2º Ciclo)</p>
           </div>
         </div>
-
-        <div className="month-selector">
-          <label>Visualizar mês:</label>
-          <select
-            value={mesSelecionado}
-            onChange={(e) => setMesSelecionado(Number(e.target.value))}
-          >
-            {resultadosMensais.map((r, idx) => (
-              <option key={idx} value={idx}>
-                {getMesNome(r.mes)}/{r.ano}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Cards de Resumo Geral */}
@@ -173,7 +158,7 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
         <div className="summary-card glass-card">
           <div className="card-header">
             <Award size={24} />
-            <h3>Classificação Atual</h3>
+            <h3>Classificação</h3>
           </div>
           <div className="card-value">
             <span className={`badge badge-${classificacao.toLowerCase().replace('_', '-')}`}>
@@ -194,15 +179,13 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
 
         <div className="summary-card glass-card">
           <div className="card-header">
-            <TrendingUp size={24} />
-            <h3>Pontuação</h3>
+            <Target size={24} />
+            <h3>Pontuação Média</h3>
           </div>
           <div className="card-value text-gradient">
             {formatarPontuacao(pontuacaoMedia)}
           </div>
-          <div className="card-footer">
-            Média do Ciclo
-          </div>
+          <div className="card-footer">Média do ciclo</div>
         </div>
 
         <div className="summary-card glass-card">
@@ -213,221 +196,215 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
           <div className="card-value text-gradient">
             {formatarMoeda(receitaTotal)}
           </div>
-          <div className="card-footer">
-            {vendas.length} vendas no ciclo
-          </div>
-        </div>
-
-        <div className="summary-card glass-card">
-          <div className="card-header">
-            <Target size={24} />
-            <h3>Pontos ({getMesNome(resultadoMensal.mes)})</h3>
-          </div>
-          <div className="card-value text-gradient">
-            {formatarPontuacao(resultadoMensal.pontosTotal)}
-          </div>
-          <div className="card-footer">
-            {formatarMoeda(
-              resultadoMensal.receitaDadosAvancados +
-              resultadoMensal.receitaVozAvancada +
-              resultadoMensal.receitaDigitalTI +
-              resultadoMensal.receitaNovosProdutos +
-              resultadoMensal.receitaLocacaoEquipamentos +
-              resultadoMensal.receitaLicencas
-            )}
-          </div>
+          <div className="card-footer">{vendas.length} vendas</div>
         </div>
       </div>
 
-      {/* Detalhes por Produto - Mês Selecionado */}
-      <div className="product-details">
+      {/* Cards Mensais Compactos */}
+      <div className="monthly-cards-container">
         <h2 className="section-title">
-          Performance por Produto - {getMesNome(resultadoMensal.mes)}/{resultadoMensal.ano}
+          <BarChart3 size={24} />
+          Performance Mensal
         </h2>
 
-        {/* Dados Avançados */}
-        <ProductCard
-          titulo="Dados Avançados"
-          cor="#3b82f6"
-          info={infoDadosAvancados}
-        />
-
-        {/* Voz Avançada */}
-        <ProductCard
-          titulo="Voz Avançada + VVN"
-          cor="#8b5cf6"
-          info={infoVozAvancada}
-        />
-
-        {/* Digital/TI */}
-        <ProductCard
-          titulo="Digital/TI"
-          cor="#10b981"
-          info={infoDigitalTI}
-        />
-
-        {/* Produtos Extras */}
-        <div className="extra-products">
-          <h3>Produtos Extras</h3>
-
-          <ProductCardCompact
-            titulo="Novos Produtos"
-            cor="#f59e0b"
-            info={infoNovosProdutos}
-          />
-
-          <ProductCardCompact
-            titulo="Locação de Equipamentos"
-            cor="#ec4899"
-            info={infoLocacao}
-          />
-
-          <ProductCardCompact
-            titulo="Licenças"
-            cor="#6366f1"
-            info={infoLicencas}
-          />
+        <div className="monthly-cards-grid">
+          {resultadosMensais.map((mes, idx) => (
+            <MonthCard
+              key={idx}
+              mes={mes}
+              isExpanded={mesExpandido === idx}
+              onToggle={() => setMesExpandido(mesExpandido === idx ? null : idx)}
+              onProductClick={(categoria) => {
+                const pedidos = getPedidosPorCategoria(mes.mes, categoria);
+                setProdutoSelecionado({ mes: mes.mes, categoria, pedidos });
+              }}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Tabela de Resultados Mensais */}
-      <div className="monthly-results glass-card">
-        <h3>Histórico Completo do Ciclo</h3>
-        <div className="table-container">
-          <table className="results-table">
-            <thead>
-              <tr>
-                <th>Mês</th>
-                <th>Dados Avanç.</th>
-                <th>Voz Avanç.</th>
-                <th>Digital/TI</th>
-                <th>Extras</th>
-                <th>Receita Total</th>
-                <th>Pontos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resultadosMensais.map((r, index) => (
-                <tr
-                  key={index}
-                  className={index === mesSelecionado ? 'selected-month' : ''}
-                  onClick={() => setMesSelecionado(index)}
+      {/* Modal de Pedidos */}
+      {produtoSelecionado && (
+        <PedidosModal
+          mes={produtoSelecionado.mes}
+          categoria={produtoSelecionado.categoria}
+          pedidos={produtoSelecionado.pedidos}
+          onClose={() => setProdutoSelecionado(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Componente de Card Mensal
+function MonthCard({
+  mes,
+  isExpanded,
+  onToggle,
+  onProductClick
+}: {
+  mes: ResultadoMensal;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onProductClick: (categoria: string) => void;
+}) {
+  const receitaTotal = mes.receitaDadosAvancados + mes.receitaVozAvancada + mes.receitaDigitalTI +
+    mes.receitaNovosProdutos + mes.receitaLocacaoEquipamentos + mes.receitaLicencas;
+
+  const produtos = [
+    { nome: 'Dados Avançados', categoria: 'DADOS_AVANCADOS', receita: mes.receitaDadosAvancados, pontos: mes.pontosDadosAvancados, cor: '#3b82f6', faixas: FAIXAS_DADOS_AVANCADOS },
+    { nome: 'Voz Avançada', categoria: 'VOZ_AVANCADA', receita: mes.receitaVozAvancada, pontos: mes.pontosVozAvancada, cor: '#8b5cf6', faixas: FAIXAS_VOZ_AVANCADA },
+    { nome: 'Digital/TI', categoria: 'DIGITAL_TI', receita: mes.receitaDigitalTI, pontos: mes.pontosDigitalTI, cor: '#10b981', faixas: FAIXAS_DIGITAL_TI },
+    { nome: 'Novos Produtos', categoria: 'NOVOS_PRODUTOS', receita: mes.receitaNovosProdutos, pontos: mes.pontosNovosProdutos, cor: '#f59e0b', faixas: FAIXAS_NOVOS_PRODUTOS },
+    { nome: 'Locação', categoria: 'LOCACAO_EQUIPAMENTOS', receita: mes.receitaLocacaoEquipamentos, pontos: mes.pontosLocacaoEquipamentos, cor: '#ec4899', faixas: FAIXAS_LOCACAO_EQUIPAMENTOS },
+    { nome: 'Licenças', categoria: 'LICENCAS', receita: mes.receitaLicencas, pontos: mes.pontosLicencas, cor: '#6366f1', faixas: FAIXAS_LICENCAS }
+  ];
+
+  return (
+    <div className={`month-card glass-card ${isExpanded ? 'expanded' : ''}`}>
+      {/* Header compacto */}
+      <div className="month-card-header" onClick={onToggle}>
+        <div className="month-info">
+          <h3>{getMesNome(mes.mes)}/{mes.ano}</h3>
+          <div className="month-stats">
+            <span className="revenue">{formatarMoeda(receitaTotal)}</span>
+            <span className="points">{formatarPontuacao(mes.pontosTotal)} pts</span>
+          </div>
+        </div>
+        <div className="expand-icon">
+          {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+        </div>
+      </div>
+
+      {/* Conteúdo expandido */}
+      {isExpanded && (
+        <div className="month-card-content">
+          <div className="products-grid">
+            {produtos.map((prod, idx) => {
+              const info = calcularInfoFaixa(prod.receita, prod.faixas);
+              return (
+                <div
+                  key={idx}
+                  className="product-mini-card"
+                  style={{ borderLeftColor: prod.cor }}
+                  onClick={() => onProductClick(prod.categoria)}
                 >
-                  <td><strong>{getMesNome(r.mes)}/{r.ano}</strong></td>
-                  <td>{formatarMoeda(r.receitaDadosAvancados)}</td>
-                  <td>{formatarMoeda(r.receitaVozAvancada)}</td>
-                  <td>{formatarMoeda(r.receitaDigitalTI)}</td>
-                  <td>
-                    {formatarMoeda(
-                      r.receitaNovosProdutos +
-                      r.receitaLocacaoEquipamentos +
-                      r.receitaLicencas
-                    )}
-                  </td>
-                  <td>
-                    <strong>
-                      {formatarMoeda(
-                        r.receitaDadosAvancados +
-                        r.receitaVozAvancada +
-                        r.receitaDigitalTI +
-                        r.receitaNovosProdutos +
-                        r.receitaLocacaoEquipamentos +
-                        r.receitaLicencas
-                      )}
-                    </strong>
-                  </td>
-                  <td className="points-cell">
-                    <strong>{formatarPontuacao(r.pontosTotal)}</strong>
-                  </td>
+                  <div className="product-mini-header">
+                    <h4 style={{ color: prod.cor }}>{prod.nome}</h4>
+                    <Package size={16} style={{ color: prod.cor }} />
+                  </div>
+                  <div className="product-mini-stats">
+                    <div className="stat">
+                      <span className="label">Receita</span>
+                      <span className="value">{formatarMoeda(prod.receita)}</span>
+                    </div>
+                    <div className="stat">
+                      <span className="label">Pontos</span>
+                      <span className="value" style={{ color: prod.cor }}>
+                        {formatarPontuacao(prod.pontos)}
+                      </span>
+                    </div>
+                    <div className="stat">
+                      <span className="label">Faixa</span>
+                      <span className="value">F{info.faixaAtual}</span>
+                    </div>
+                  </div>
+                  {info.proximaFaixa && (
+                    <div className="product-mini-progress">
+                      <div className="progress-bar-mini">
+                        <div
+                          className="progress-fill-mini"
+                          style={{
+                            width: `${info.percentualProgresso}%`,
+                            backgroundColor: prod.cor
+                          }}
+                        />
+                      </div>
+                      <span className="next-target">
+                        {formatarMoeda(info.receitaParaProxima)} para F{info.proximaFaixa.faixa}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Modal de Pedidos
+function PedidosModal({
+  mes,
+  categoria,
+  pedidos,
+  onClose
+}: {
+  mes: number;
+  categoria: string;
+  pedidos: RegistroVenda[];
+  onClose: () => void;
+}) {
+  const nomesCategoria: Record<string, string> = {
+    'DADOS_AVANCADOS': 'Dados Avançados',
+    'VOZ_AVANCADA': 'Voz Avançada + VVN',
+    'DIGITAL_TI': 'Digital/TI',
+    'NOVOS_PRODUTOS': 'Novos Produtos',
+    'LOCACAO_EQUIPAMENTOS': 'Locação de Equipamentos',
+    'LICENCAS': 'Licenças'
+  };
+
+  const receitaTotal = pedidos.reduce((acc, p) => acc + p.valorBrutoSN, 0);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content glass-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <h2>
+              <FileText size={24} />
+              {nomesCategoria[categoria]} - {getMesNome(mes)}
+            </h2>
+            <p>{pedidos.length} pedidos • Receita total: {formatarMoeda(receitaTotal)}</p>
+          </div>
+          <button className="close-button" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="pedidos-table-container">
+            <table className="pedidos-table">
+              <thead>
+                <tr>
+                  <th>Pedido SN</th>
+                  <th>Cliente</th>
+                  <th>Produto</th>
+                  <th>Data Ativação</th>
+                  <th>Valor Bruto</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Componente de Card de Produto (Principal)
-function ProductCard({ titulo, cor, info }: {
-  titulo: string;
-  cor: string;
-  info: FaixaInfo;
-}) {
-  return (
-    <div className="product-card glass-card" style={{ borderLeftColor: cor }}>
-      <div className="product-header">
-        <div>
-          <h3 style={{ color: cor }}>{titulo}</h3>
-          <p className="product-revenue">{formatarMoeda(info.receitaAtual)}</p>
-        </div>
-        <div className="product-points">
-          <Award size={32} style={{ color: cor }} />
-          <span>{formatarPontuacao(info.pontosAtuais)} pts</span>
-        </div>
-      </div>
-
-      <div className="faixa-info">
-        <div className="faixa-atual">
-          <span className="label">Faixa Atual:</span>
-          <span className="value">Faixa {info.faixaAtual}</span>
-        </div>
-
-        <div className="progress-bar-container">
-          <div
-            className="progress-bar-fill"
-            style={{
-              width: `${info.percentualProgresso}%`,
-              backgroundColor: cor
-            }}
-          />
-        </div>
-
-        {info.proximaFaixa ? (
-          <div className="proxima-faixa">
-            <ChevronRight size={16} />
-            <span>
-              Falta <strong>{formatarMoeda(info.receitaParaProxima)}</strong> para
-              Faixa {info.proximaFaixa.faixa} ({info.proximaFaixa.pontos} pts)
-            </span>
+              </thead>
+              <tbody>
+                {pedidos.map((pedido) => (
+                  <tr key={pedido.id}>
+                    <td><strong>{pedido.pedidoSN}</strong></td>
+                    <td>
+                      <div className="client-info">
+                        <span className="client-name">{pedido.nomeCliente}</span>
+                        <span className="client-cnpj">{pedido.cnpj}</span>
+                      </div>
+                    </td>
+                    <td>{pedido.produto}</td>
+                    <td>{pedido.dataAtivacao.toLocaleDateString('pt-BR')}</td>
+                    <td><strong>{formatarMoeda(pedido.valorBrutoSN)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <div className="proxima-faixa max-tier">
-            <Award size={16} />
-            <span>Faixa máxima atingida!</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Componente de Card Compacto (Extras)
-function ProductCardCompact({ titulo, cor, info }: {
-  titulo: string;
-  cor: string;
-  info: FaixaInfo;
-}) {
-  return (
-    <div className="product-card-compact glass-card" style={{ borderLeftColor: cor }}>
-      <div className="compact-header">
-        <h4 style={{ color: cor }}>{titulo}</h4>
-        <div className="compact-stats">
-          <span className="revenue">{formatarMoeda(info.receitaAtual)}</span>
-          <span className="points" style={{ color: cor }}>
-            {formatarPontuacao(info.pontosAtuais)} pts
-          </span>
         </div>
-      </div>
-
-      <div className="compact-faixa">
-        <span>Faixa {info.faixaAtual}</span>
-        {info.proximaFaixa && (
-          <span className="next-info">
-            Próxima: {formatarMoeda(info.receitaParaProxima)}
-          </span>
-        )}
       </div>
     </div>
   );

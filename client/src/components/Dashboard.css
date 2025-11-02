@@ -37,11 +37,6 @@
 /* Dashboard Header */
 .dashboard-header {
   padding: var(--spacing-xl);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--spacing-lg);
 }
 
 .period-info {
@@ -60,41 +55,6 @@
   margin: 0;
   color: var(--color-gray-400);
   font-size: 0.95rem;
-}
-
-.month-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.month-selector label {
-  color: var(--color-gray-400);
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.month-selector select {
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  color: var(--color-primary-light);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.month-selector select:hover {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: rgba(139, 92, 246, 0.5);
-}
-
-.month-selector select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 /* Summary Cards */
@@ -148,8 +108,8 @@
   margin-top: var(--spacing-xs);
 }
 
-/* Product Details Section */
-.product-details {
+/* Monthly Cards Container */
+.monthly-cards-container {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
@@ -157,262 +117,328 @@
 
 .section-title {
   color: var(--color-primary-light);
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   margin: 0;
-  padding-bottom: var(--spacing-md);
-  border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-/* Product Card (Principal) */
-.product-card {
-  padding: var(--spacing-xl);
-  border-left: 4px solid;
+.monthly-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+/* Month Card */
+.month-card {
+  padding: 0;
+  overflow: hidden;
   transition: all 0.3s ease;
+  cursor: pointer;
 }
 
-.product-card:hover {
+.month-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 30px rgba(139, 92, 246, 0.2);
 }
 
-.product-header {
+.month-card.expanded {
+  grid-column: 1 / -1;
+  cursor: default;
+}
+
+.month-card-header {
+  padding: var(--spacing-lg);
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--spacing-lg);
-}
-
-.product-header h3 {
-  margin: 0 0 var(--spacing-sm) 0;
-  font-size: 1.3rem;
-}
-
-.product-revenue {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-gray-300);
-  margin: 0;
-}
-
-.product-points {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-md);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.month-card-header:hover {
   background: rgba(139, 92, 246, 0.05);
-  border-radius: 12px;
 }
 
-.product-points span {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-gray-300);
-}
-
-.faixa-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.faixa-atual {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.faixa-atual .label {
-  color: var(--color-gray-400);
-  font-size: 0.9rem;
-}
-
-.faixa-atual .value {
-  color: var(--color-primary-light);
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
-.progress-bar-container {
-  width: 100%;
-  height: 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  border-radius: 6px;
-  transition: width 0.5s ease;
-  position: relative;
-}
-
-.progress-bar-fill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
-  );
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.proxima-faixa {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  color: var(--color-gray-400);
-  font-size: 0.9rem;
-}
-
-.proxima-faixa.max-tier {
-  color: var(--color-success);
-  font-weight: 600;
-}
-
-.proxima-faixa strong {
-  color: var(--color-primary-light);
-}
-
-/* Extra Products */
-.extra-products {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  background: rgba(139, 92, 246, 0.03);
-  border-radius: 16px;
-}
-
-.extra-products h3 {
-  color: var(--color-gray-400);
-  font-size: 1.1rem;
+.month-info h3 {
   margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-primary-light);
+  font-size: 1.2rem;
 }
 
-.product-card-compact {
-  padding: var(--spacing-lg);
+.month-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.month-stats .revenue {
+  color: var(--color-gray-300);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.month-stats .points {
+  color: var(--color-success);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.expand-icon {
+  color: var(--color-primary-light);
+  transition: transform 0.3s ease;
+}
+
+.month-card.expanded .expand-icon {
+  transform: rotate(0deg);
+}
+
+/* Month Card Content */
+.month-card-content {
+  padding: 0 var(--spacing-lg) var(--spacing-lg);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* Product Mini Card */
+.product-mini-card {
+  padding: var(--spacing-md);
+  background: rgba(139, 92, 246, 0.03);
+  border-radius: 12px;
   border-left: 3px solid;
+  cursor: pointer;
   transition: all 0.3s ease;
 }
 
-.product-card-compact:hover {
+.product-mini-card:hover {
+  background: rgba(139, 92, 246, 0.08);
   transform: translateX(4px);
   box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
 }
 
-.compact-header {
+.product-mini-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--spacing-sm);
 }
 
-.compact-header h4 {
+.product-mini-header h4 {
   margin: 0;
-  font-size: 1rem;
-}
-
-.compact-stats {
-  display: flex;
-  gap: var(--spacing-md);
-  align-items: center;
-}
-
-.compact-stats .revenue {
-  color: var(--color-gray-300);
+  font-size: 0.95rem;
   font-weight: 600;
-  font-size: 0.95rem;
 }
 
-.compact-stats .points {
-  font-weight: 700;
-  font-size: 0.95rem;
-}
-
-.compact-faixa {
+.product-mini-stats {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.product-mini-stats .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.product-mini-stats .label {
+  font-size: 0.7rem;
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.product-mini-stats .value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-gray-300);
+}
+
+.product-mini-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-bar-mini {
+  width: 100%;
+  height: 6px;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill-mini {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.next-target {
+  font-size: 0.75rem;
   color: var(--color-gray-400);
-  font-size: 0.85rem;
 }
 
-.compact-faixa .next-info {
-  color: var(--color-primary-light);
-  font-weight: 600;
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
 }
 
-/* Monthly Results Table */
-.monthly-results {
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 1000px;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
   padding: var(--spacing-xl);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
-.monthly-results h3 {
+.modal-header h2 {
+  margin: 0 0 var(--spacing-xs) 0;
   color: var(--color-primary-light);
-  margin-bottom: var(--spacing-lg);
-  font-size: 1.3rem;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
-.table-container {
+.modal-header p {
+  margin: 0;
+  color: var(--color-gray-400);
+  font-size: 0.9rem;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--color-gray-400);
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--color-primary-light);
+}
+
+.modal-body {
+  padding: var(--spacing-xl);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.pedidos-table-container {
   overflow-x: auto;
 }
 
-.results-table {
+.pedidos-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.results-table th {
+.pedidos-table th {
   text-align: left;
   padding: var(--spacing-md);
   color: var(--color-gray-400);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.results-table td {
+.pedidos-table td {
   padding: var(--spacing-md);
   color: var(--color-gray-300);
   border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+  font-size: 0.9rem;
 }
 
-.results-table tbody tr {
-  cursor: pointer;
-  transition: all 0.2s ease;
+.pedidos-table tbody tr {
+  transition: background 0.2s ease;
 }
 
-.results-table tbody tr:hover {
+.pedidos-table tbody tr:hover {
   background: rgba(139, 92, 246, 0.05);
 }
 
-.results-table tbody tr.selected-month {
-  background: rgba(139, 92, 246, 0.1);
-  border-left: 3px solid var(--color-primary);
+.client-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.points-cell {
-  font-weight: 700;
-  color: var(--color-primary-light);
+.client-name {
+  color: var(--color-gray-300);
+  font-weight: 600;
 }
 
+.client-cnpj {
+  color: var(--color-gray-500);
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
   .summary-cards {
     grid-template-columns: 1fr;
@@ -422,28 +448,25 @@
     font-size: 1.5rem;
   }
 
-  .dashboard-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .monthly-cards-grid {
+    grid-template-columns: 1fr;
   }
 
-  .product-header {
-    flex-direction: column;
-    gap: var(--spacing-md);
+  .products-grid {
+    grid-template-columns: 1fr;
   }
 
-  .compact-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+  .modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
   }
 
-  .results-table {
-    font-size: 0.85rem;
+  .pedidos-table {
+    font-size: 0.8rem;
   }
 
-  .results-table th,
-  .results-table td {
+  .pedidos-table th,
+  .pedidos-table td {
     padding: var(--spacing-sm);
   }
 }
