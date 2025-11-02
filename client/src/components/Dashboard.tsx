@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ResultadoCiclo, RegistroVenda, FaixaReceita, ResultadoMensal } from '../types/certification';
 import {
   getNomeClassificacao,
@@ -27,13 +27,24 @@ import {
   Target,
   X,
   Package,
-  FileText
+  FileText,
+  Edit3,
+  Save,
+  RotateCcw
 } from 'lucide-react';
 import './Dashboard.css';
 
 interface DashboardProps {
   resultado: ResultadoCiclo | null;
   vendas: RegistroVenda[];
+}
+
+// Interface para correções manuais de valores
+interface CorrecaoValor {
+  pedidoSN: string;
+  valorOriginal: number;
+  valorCorrigido: number;
+  motivo?: string;
 }
 
 interface FaixaInfo {
@@ -98,6 +109,63 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     pedidos: RegistroVenda[];
   } | null>(null);
 
+  // Estado para correções manuais de valores
+  const [correcoes, setCorrecoes] = useState<Map<string, CorrecaoValor>>(new Map());
+
+  // Carrega correções do localStorage ao montar
+  useEffect(() => {
+    const correcoesStr = localStorage.getItem('correcoes-valores');
+    if (correcoesStr) {
+      try {
+        const correcoesArray: CorrecaoValor[] = JSON.parse(correcoesStr);
+        const correcoesMap = new Map(correcoesArray.map(c => [c.pedidoSN, c]));
+        setCorrecoes(correcoesMap);
+        console.log('[CORREÇÕES] Carregadas do localStorage:', correcoesArray.length);
+      } catch (e) {
+        console.error('[CORREÇÕES] Erro ao carregar:', e);
+      }
+    }
+  }, []);
+
+  // Salva correções no localStorage sempre que mudar
+  useEffect(() => {
+    if (correcoes.size > 0) {
+      const correcoesArray = Array.from(correcoes.values());
+      localStorage.setItem('correcoes-valores', JSON.stringify(correcoesArray));
+      console.log('[CORREÇÕES] Salvas no localStorage:', correcoesArray.length);
+    }
+  }, [correcoes]);
+
+  // Função para aplicar correções às vendas
+  const aplicarCorrecoes = (vendasOriginais: RegistroVenda[]): RegistroVenda[] => {
+    return vendasOriginais.map(v => {
+      const correcao = correcoes.get(v.pedidoSN);
+      if (correcao) {
+        return { ...v, valorBrutoSN: correcao.valorCorrigido };
+      }
+      return v;
+    });
+  };
+
+  // Função para adicionar/atualizar correção
+  const adicionarCorrecao = (pedidoSN: string, valorOriginal: number, valorCorrigido: number, motivo?: string) => {
+    const novasCorrecoes = new Map(correcoes);
+    novasCorrecoes.set(pedidoSN, { pedidoSN, valorOriginal, valorCorrigido, motivo });
+    setCorrecoes(novasCorrecoes);
+  };
+
+  // Função para remover correção
+  const removerCorrecao = (pedidoSN: string) => {
+    const novasCorrecoes = new Map(correcoes);
+    novasCorrecoes.delete(pedidoSN);
+    setCorrecoes(novasCorrecoes);
+
+    // Remove do localStorage se ficar vazio
+    if (novasCorrecoes.size === 0) {
+      localStorage.removeItem('correcoes-valores');
+    }
+  };
+
   if (!resultado || vendas.length === 0) {
     return (
       <div className="dashboard-empty fade-in">
@@ -116,10 +184,13 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
 
   const { classificacao, bonusPercentual, pontuacaoMedia, resultadosMensais } = resultado;
 
+  // Aplica correções manuais às vendas
+  const vendasComCorrecoes = aplicarCorrecoes(vendas);
+
   // Filtra vendas por parceiro
   const vendasFiltradas = parceiroFiltro === 'TODOS'
-    ? vendas
-    : vendas.filter(v => v.parceiro === parceiroFiltro);
+    ? vendasComCorrecoes
+    : vendasComCorrecoes.filter(v => v.parceiro === parceiroFiltro);
 
   // Conta vendas por parceiro
   const vendasSafeTI = vendas.filter(v => v.parceiro === 'SAFE_TI').length;
@@ -321,7 +392,10 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
           mes={produtoSelecionado.mes}
           categoria={produtoSelecionado.categoria}
           pedidos={produtoSelecionado.pedidos}
+          correcoes={correcoes}
           onClose={() => setProdutoSelecionado(null)}
+          onEditValor={adicionarCorrecao}
+          onRemoverCorrecao={removerCorrecao}
         />
       )}
     </div>
@@ -432,13 +506,22 @@ function PedidosModal({
   mes,
   categoria,
   pedidos,
-  onClose
+  correcoes,
+  onClose,
+  onEditValor,
+  onRemoverCorrecao
 }: {
   mes: number;
   categoria: string;
   pedidos: RegistroVenda[];
+  correcoes: Map<string, CorrecaoValor>;
   onClose: () => void;
+  onEditValor: (pedidoSN: string, valorOriginal: number, valorCorrigido: number, motivo?: string) => void;
+  onRemoverCorrecao: (pedidoSN: string) => void;
 }) {
+  const [editando, setEditando] = useState<string | null>(null);
+  const [valorEditando, setValorEditando] = useState<string>('');
+  const [motivoEditando, setMotivoEditando] = useState<string>('');
   const nomesCategoria: Record<string, string> = {
     'DADOS_AVANCADOS': 'Dados Avançados',
     'VOZ_AVANCADA': 'Voz Avançada + VVN',
@@ -476,23 +559,114 @@ function PedidosModal({
                   <th>Produto</th>
                   <th>Data Ativação</th>
                   <th>Valor Bruto</th>
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {pedidos.map((pedido) => (
-                  <tr key={pedido.id}>
-                    <td><strong>{pedido.pedidoSN}</strong></td>
-                    <td>
-                      <div className="client-info">
-                        <span className="client-name">{pedido.nomeCliente}</span>
-                        <span className="client-cnpj">{pedido.cnpj}</span>
-                      </div>
-                    </td>
-                    <td>{pedido.produto}</td>
-                    <td>{pedido.dataAtivacao.toLocaleDateString('pt-BR')}</td>
-                    <td><strong>{formatarMoeda(pedido.valorBrutoSN)}</strong></td>
-                  </tr>
-                ))}
+                {pedidos.map((pedido) => {
+                  const correcao = correcoes.get(pedido.pedidoSN);
+                  const isEditando = editando === pedido.pedidoSN;
+
+                  return (
+                    <tr key={pedido.id} className={correcao ? 'valor-corrigido' : ''}>
+                      <td><strong>{pedido.pedidoSN}</strong></td>
+                      <td>
+                        <div className="client-info">
+                          <span className="client-name">{pedido.nomeCliente}</span>
+                          <span className="client-cnpj">{pedido.cnpj}</span>
+                        </div>
+                      </td>
+                      <td>{pedido.produto}</td>
+                      <td>{pedido.dataAtivacao.toLocaleDateString('pt-BR')}</td>
+                      <td>
+                        {isEditando ? (
+                          <div className="edit-valor-container">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={valorEditando}
+                              onChange={(e) => setValorEditando(e.target.value)}
+                              className="input-valor"
+                              placeholder="Valor corrigido"
+                              autoFocus
+                            />
+                            <input
+                              type="text"
+                              value={motivoEditando}
+                              onChange={(e) => setMotivoEditando(e.target.value)}
+                              className="input-motivo"
+                              placeholder="Motivo (opcional)"
+                            />
+                          </div>
+                        ) : (
+                          <div className="valor-display">
+                            <strong>{formatarMoeda(pedido.valorBrutoSN)}</strong>
+                            {correcao && (
+                              <span className="badge-corrigido" title={`Original: ${formatarMoeda(correcao.valorOriginal)}${correcao.motivo ? '\nMotivo: ' + correcao.motivo : ''}`}>
+                                EDITADO
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {isEditando ? (
+                          <div className="action-buttons">
+                            <button
+                              className="btn-icon btn-save"
+                              onClick={() => {
+                                const valor = parseFloat(valorEditando);
+                                if (!isNaN(valor) && valor >= 0) {
+                                  onEditValor(pedido.pedidoSN, correcao?.valorOriginal || pedido.valorBrutoSN, valor, motivoEditando || undefined);
+                                  setEditando(null);
+                                  setValorEditando('');
+                                  setMotivoEditando('');
+                                }
+                              }}
+                              title="Salvar"
+                            >
+                              <Save size={16} />
+                            </button>
+                            <button
+                              className="btn-icon btn-cancel"
+                              onClick={() => {
+                                setEditando(null);
+                                setValorEditando('');
+                                setMotivoEditando('');
+                              }}
+                              title="Cancelar"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="action-buttons">
+                            <button
+                              className="btn-icon btn-edit"
+                              onClick={() => {
+                                setEditando(pedido.pedidoSN);
+                                setValorEditando(pedido.valorBrutoSN.toString());
+                                setMotivoEditando(correcao?.motivo || '');
+                              }}
+                              title="Editar valor"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            {correcao && (
+                              <button
+                                className="btn-icon btn-reset"
+                                onClick={() => onRemoverCorrecao(pedido.pedidoSN)}
+                                title={`Restaurar para ${formatarMoeda(correcao.valorOriginal)}`}
+                              >
+                                <RotateCcw size={16} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
