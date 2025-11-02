@@ -34,6 +34,70 @@
   margin-bottom: var(--spacing-xl);
 }
 
+/* Dashboard Header */
+.dashboard-header {
+  padding: var(--spacing-xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-lg);
+}
+
+.period-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.period-info h2 {
+  margin: 0;
+  color: var(--color-primary-light);
+  font-size: 1.5rem;
+}
+
+.period-info p {
+  margin: 0;
+  color: var(--color-gray-400);
+  font-size: 0.95rem;
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.month-selector label {
+  color: var(--color-gray-400);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.month-selector select {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: var(--color-primary-light);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.month-selector select:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.month-selector select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* Summary Cards */
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -70,8 +134,232 @@
 .card-footer {
   font-size: 0.85rem;
   color: var(--color-gray-500);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
 }
 
+.next-tier {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-success);
+  font-weight: 600;
+  margin-top: var(--spacing-xs);
+}
+
+/* Product Details Section */
+.product-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.section-title {
+  color: var(--color-primary-light);
+  font-size: 1.5rem;
+  margin: 0;
+  padding-bottom: var(--spacing-md);
+  border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+}
+
+/* Product Card (Principal) */
+.product-card {
+  padding: var(--spacing-xl);
+  border-left: 4px solid;
+  transition: all 0.3s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.2);
+}
+
+.product-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-lg);
+}
+
+.product-header h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  font-size: 1.3rem;
+}
+
+.product-revenue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-gray-300);
+  margin: 0;
+}
+
+.product-points {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 12px;
+}
+
+.product-points span {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-gray-300);
+}
+
+.faixa-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.faixa-atual {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.faixa-atual .label {
+  color: var(--color-gray-400);
+  font-size: 0.9rem;
+}
+
+.faixa-atual .value {
+  color: var(--color-primary-light);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.5s ease;
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.proxima-faixa {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-gray-400);
+  font-size: 0.9rem;
+}
+
+.proxima-faixa.max-tier {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.proxima-faixa strong {
+  color: var(--color-primary-light);
+}
+
+/* Extra Products */
+.extra-products {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: rgba(139, 92, 246, 0.03);
+  border-radius: 16px;
+}
+
+.extra-products h3 {
+  color: var(--color-gray-400);
+  font-size: 1.1rem;
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.product-card-compact {
+  padding: var(--spacing-lg);
+  border-left: 3px solid;
+  transition: all 0.3s ease;
+}
+
+.product-card-compact:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+}
+
+.compact-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.compact-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.compact-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.compact-stats .revenue {
+  color: var(--color-gray-300);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.compact-stats .points {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.compact-faixa {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--color-gray-400);
+  font-size: 0.85rem;
+}
+
+.compact-faixa .next-info {
+  color: var(--color-primary-light);
+  font-weight: 600;
+}
+
+/* Monthly Results Table */
 .monthly-results {
   padding: var(--spacing-xl);
 }
@@ -106,8 +394,18 @@
   border-bottom: 1px solid rgba(139, 92, 246, 0.1);
 }
 
+.results-table tbody tr {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
 .results-table tbody tr:hover {
   background: rgba(139, 92, 246, 0.05);
+}
+
+.results-table tbody tr.selected-month {
+  background: rgba(139, 92, 246, 0.1);
+  border-left: 3px solid var(--color-primary);
 }
 
 .points-cell {
@@ -122,5 +420,30 @@
 
   .card-value {
     font-size: 1.5rem;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .product-header {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .compact-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .results-table {
+    font-size: 0.85rem;
+  }
+
+  .results-table th,
+  .results-table td {
+    padding: var(--spacing-sm);
   }
 }

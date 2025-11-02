@@ -99,10 +99,21 @@ export function normalizarValor(valor: any): number {
   if (typeof valor === 'string') {
     // Remove símbolos de moeda e espaços
     let valorLimpo = valor.replace(/[R$\s]/g, '');
-    // Substitui vírgula por ponto
-    valorLimpo = valorLimpo.replace(',', '.');
-    // Remove pontos de milhares (ex: 1.000.00 -> 1000.00)
-    valorLimpo = valorLimpo.replace(/\.(?=\d{3})/g, '');
+
+    // Detecta formato: se tem vírgula E ponto, vírgula é decimal (formato BR)
+    // Ex: 1.234,56 ou 1234,56
+    const temVirgula = valorLimpo.includes(',');
+    const temPonto = valorLimpo.includes('.');
+
+    if (temVirgula && temPonto) {
+      // Formato brasileiro: 1.234.567,89 -> remove pontos, vírgula vira ponto
+      valorLimpo = valorLimpo.replace(/\./g, ''); // Remove todos os pontos
+      valorLimpo = valorLimpo.replace(',', '.'); // Vírgula vira ponto decimal
+    } else if (temVirgula) {
+      // Só tem vírgula: 1234,56 -> vírgula vira ponto
+      valorLimpo = valorLimpo.replace(',', '.');
+    }
+    // Se só tem ponto: 1234.56 -> já está correto
 
     const numero = parseFloat(valorLimpo);
     return isNaN(numero) ? 0 : numero;
