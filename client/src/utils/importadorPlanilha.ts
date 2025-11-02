@@ -94,31 +94,45 @@ export function identificarParceiro(parceiro: string): ParceiroVivo {
  * Normaliza valor monetário de diferentes formatos
  */
 export function normalizarValor(valor: any): number {
-  if (typeof valor === 'number') return valor;
+  // Log para debug
+  const valorOriginal = valor;
+
+  if (typeof valor === 'number') {
+    console.log(`[DEBUG] Valor numérico direto: ${valor}`);
+    return valor;
+  }
 
   if (typeof valor === 'string') {
     // Remove símbolos de moeda e espaços
     let valorLimpo = valor.replace(/[R$\s]/g, '');
+    console.log(`[DEBUG] Valor original: "${valorOriginal}" → Limpo: "${valorLimpo}"`);
 
     // Detecta formato: se tem vírgula E ponto, vírgula é decimal (formato BR)
     // Ex: 1.234,56 ou 1234,56
     const temVirgula = valorLimpo.includes(',');
     const temPonto = valorLimpo.includes('.');
+    console.log(`[DEBUG] Tem vírgula: ${temVirgula}, Tem ponto: ${temPonto}`);
 
     if (temVirgula && temPonto) {
       // Formato brasileiro: 1.234.567,89 -> remove pontos, vírgula vira ponto
       valorLimpo = valorLimpo.replace(/\./g, ''); // Remove todos os pontos
       valorLimpo = valorLimpo.replace(',', '.'); // Vírgula vira ponto decimal
+      console.log(`[DEBUG] Formato BR (ponto+vírgula) → "${valorLimpo}"`);
     } else if (temVirgula) {
       // Só tem vírgula: 1234,56 -> vírgula vira ponto
       valorLimpo = valorLimpo.replace(',', '.');
+      console.log(`[DEBUG] Só vírgula → "${valorLimpo}"`);
+    } else if (temPonto) {
+      console.log(`[DEBUG] Só ponto → "${valorLimpo}"`);
     }
-    // Se só tem ponto: 1234.56 -> já está correto
 
     const numero = parseFloat(valorLimpo);
+    console.log(`[DEBUG] Resultado final: ${numero}`);
+    console.log('---');
     return isNaN(numero) ? 0 : numero;
   }
 
+  console.log(`[DEBUG] Valor não reconhecido (tipo: ${typeof valor}): ${valorOriginal}`);
   return 0;
 }
 
