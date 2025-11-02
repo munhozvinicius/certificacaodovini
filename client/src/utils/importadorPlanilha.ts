@@ -346,6 +346,21 @@ export function importarPlanilhaExcel(
         // Converte para JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as LinhaRawPlanilha[];
 
+        console.log(`\n========== INÍCIO DO PROCESSAMENTO ==========`);
+        console.log(`Total de linhas no arquivo: ${jsonData.length}`);
+        console.log(`Primeiras 3 linhas (amostra):`);
+        jsonData.slice(0, 3).forEach((row, i) => {
+          console.log(`\nLinha ${i + 1}:`);
+          console.log(`  CNPJ: ${row.NR_CNPJ} (tipo: ${typeof row.NR_CNPJ})`);
+          console.log(`  Cliente: ${row.NM_CLIENTE}`);
+          console.log(`  Tipo: ${row.TP_SOLICITACAO}`);
+          console.log(`  Pedido: ${row.PEDIDO_SN}`);
+          console.log(`  Produto: ${row.DS_PRODUTO}`);
+          console.log(`  Valor: ${row.VL_BRUTO_SN} (tipo: ${typeof row.VL_BRUTO_SN})`);
+          console.log(`  Data RFB: ${row.DT_RFB}`);
+          console.log(`  Rede: ${row.NM_REDE}`);
+        });
+
         // Agrupa pedidos de IP Dedicado
         const gruposIPDedicado = agruparPedidosIPDedicado(jsonData);
 
