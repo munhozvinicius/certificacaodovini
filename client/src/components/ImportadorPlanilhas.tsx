@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle } from 'lucide-react';
 import type { RegistroVenda, TorrePlanilha } from '../types/certification';
 import { importarPlanilhaExcel, validarArquivoExcel, MAPEAMENTOS_PADRAO } from '../utils/importadorPlanilha';
+import ListaPedidos from './ListaPedidos';
 import './ImportadorPlanilhas.css';
 
 interface ImportadorPlanilhasProps {
@@ -14,6 +15,7 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [vendasImportadas, setVendasImportadas] = useState<RegistroVenda[]>([]);
 
   const handleArquivoSelecionado = (event: React.ChangeEvent<HTMLInputElement>) => {
     const arquivoSelecionado = event.target.files?.[0];
@@ -41,6 +43,7 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
 
       const vendas = await importarPlanilhaExcel(arquivo, mapeamento);
       onVendasImportadas(vendas);
+      setVendasImportadas(vendas);
       setSucesso(true);
       setArquivo(null);
 
@@ -133,28 +136,34 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
         <div className="importador-info glass-card">
           <h3>Colunas Esperadas - Torre {torreSelecionada === 'AVANCADOS' ? 'Avançados' : torreSelecionada === 'TI_GUD' ? 'TI/GUD' : 'Tech'}</h3>
           <ul>
-            <li><strong>DT_RFS:</strong> Data de referência do serviço (mês da competência)</li>
-            <li><strong>DS_PRODUTO:</strong> Descrição/nome do produto ou serviço</li>
-            <li><strong>VL_BRUTO_SN:</strong> Valor bruto sem desconto</li>
-            <li><strong>TIPO_GANHO_DETALHE:</strong> Tipo do movimento (GANHO, PERDA ou MIGRAÇÃO)</li>
+            <li><strong>Coluna D - NR_CNPJ:</strong> CNPJ do cliente</li>
+            <li><strong>Coluna E - NM_CLIENTE:</strong> Nome do cliente</li>
+            <li><strong>Coluna H - TP_SOLICITACAO:</strong> Tipo (VENDA ou MIGRAÇÃOVENDA)</li>
+            <li><strong>Coluna R - PEDIDO_SN:</strong> Número do pedido</li>
+            <li><strong>Coluna T - TP_PRODUTO:</strong> Tipo do produto</li>
+            <li><strong>Coluna U - DS_PRODUTO:</strong> Descrição do produto</li>
+            <li><strong>Coluna AO - DT_RFB:</strong> Data de ativação</li>
+            <li><strong>Coluna BE - NM_REDE:</strong> Nome da rede/parceiro</li>
           </ul>
 
           <div className="regra-importante">
-            <strong>⚠️ Regra Importante:</strong>
-            <p>Somente serão contabilizados registros onde <strong>TIPO_GANHO_DETALHE = "GANHO"</strong></p>
-            <p>Migrações e Perdas não computam receita para a certificação</p>
+            <strong>⚠️ Regras Importantes:</strong>
+            <p><strong>1. Tipo de Solicitação:</strong> Apenas registros com <strong>TP_SOLICITACAO = "VENDA"</strong> serão contabilizados</p>
+            <p><strong>2. IP Dedicado:</strong> Quando o produto for "IP Dedicado", os pedidos com <strong>"Monitora Dados"</strong> e <strong>"IP Internet"</strong> do mesmo cliente (CNPJ) serão automaticamente agrupados e somados</p>
+            <p>Migrações não computam receita para a certificação</p>
           </div>
 
           <div className="colunas-opcionais">
-            <h4>Colunas Opcionais:</h4>
-            <ul>
-              <li>CNPJ</li>
-              <li>CLIENTE</li>
-              <li>PARCEIRO</li>
-            </ul>
+            <h4>Colunas Obrigatórias:</h4>
+            <p style={{ color: 'var(--color-gray-400)', fontSize: '0.9rem' }}>
+              Todas as colunas listadas acima são obrigatórias para o correto processamento da planilha.
+            </p>
           </div>
         </div>
       </div>
+
+      {/* Lista de Pedidos Importados */}
+      <ListaPedidos vendas={vendasImportadas} />
     </div>
   );
 }

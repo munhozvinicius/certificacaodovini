@@ -9,9 +9,10 @@ export function identificarCategoriaProduto(produto: string):
 
   const produtoLower = produto.toLowerCase();
 
-  // Dados Avançados: Internet Dedicada, VPN IP, Vivo Internet Satélite, Vox, Frame Relay
+  // Dados Avançados: Internet Dedicada, VPN IP, Vivo Internet Satélite, Vox, Frame Relay, IP dedicado
   if (
     produtoLower.includes('internet dedicada') ||
+    produtoLower.includes('ip dedicado') ||
     produtoLower.includes('vpn') ||
     produtoLower.includes('satélite') ||
     produtoLower.includes('satelite') ||
@@ -32,13 +33,14 @@ export function identificarCategoriaProduto(produto: string):
     return 'VOZ_AVANCADA';
   }
 
-  // Digital/TI
+  // Digital/TI - Incluindo monitora dados
   if (
     produtoLower.includes('digital') ||
     produtoLower.includes('ti') ||
     produtoLower.includes('cloud') ||
     produtoLower.includes('nuvem') ||
-    produtoLower.includes('one shot')
+    produtoLower.includes('one shot') ||
+    produtoLower.includes('monitora dados')
   ) {
     return 'DIGITAL_TI';
   }
@@ -146,26 +148,7 @@ export function normalizarData(data: any): Date {
 }
 
 /**
- * Identifica tipo de ganho baseado em TIPO_GANHO_DETALHE
- */
-export function identificarTipoGanho(tipoGanho: string): import('../types/certification').TipoGanho {
-  const tipoLower = tipoGanho?.toLowerCase() || '';
-
-  if (tipoLower.includes('ganho')) {
-    return 'GANHO';
-  }
-  if (tipoLower.includes('perda')) {
-    return 'PERDA';
-  }
-  if (tipoLower.includes('migra')) {
-    return 'MIGRACAO';
-  }
-
-  return 'GANHO'; // Default
-}
-
-/**
- * Identifica tipo de venda/migração
+ * Identifica tipo de venda/migração baseado em TP_SOLICITACAO
  */
 export function identificarTipoVenda(tipo: string): TipoVenda {
   const tipoLower = tipo.toLowerCase();
@@ -191,58 +174,106 @@ export function identificarAreaAtuacao(area: string): AreaAtuacao {
 }
 
 /**
- * Interface para mapeamento de colunas específicas por torre
+ * Verifica se um produto é relacionado a IP Dedicado
  */
-export interface MapeamentoColunas {
-  torre: import('../types/certification').TorrePlanilha;
-  dataRFS: string; // DT_RFS
-  valorBrutoSN: string; // VL_BRUTO_SN
-  produto: string; // DS_PRODUTO
-  tipoGanhoDetalhe?: string; // TIPO_GANHO_DETALHE (obrigatório para Avançados)
-  cnpj?: string;
-  cliente?: string;
-  parceiro?: string;
-  area?: string;
+export function isProdutoIPDedicado(produto: string): boolean {
+  const produtoLower = produto.toLowerCase();
+  return produtoLower.includes('ip dedicado') ||
+         produtoLower.includes('monitora dados') ||
+         produtoLower.includes('ip internet');
 }
 
 /**
- * Mapeamentos padrão para cada torre
+ * Interface para linha bruta da planilha
  */
-export const MAPEAMENTOS_PADRAO: Record<import('../types/certification').TorrePlanilha, MapeamentoColunas> = {
-  AVANCADOS: {
-    torre: 'AVANCADOS',
-    dataRFS: 'DT_RFS',
-    valorBrutoSN: 'VL_BRUTO_SN',
-    produto: 'DS_PRODUTO',
-    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
-    cnpj: 'CNPJ',
-    cliente: 'CLIENTE',
-    parceiro: 'PARCEIRO'
-  },
-  TI_GUD: {
-    torre: 'TI_GUD',
-    dataRFS: 'DT_RFS',
-    valorBrutoSN: 'VL_BRUTO_SN',
-    produto: 'DS_PRODUTO',
-    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
-    cnpj: 'CNPJ',
-    cliente: 'CLIENTE',
-    parceiro: 'PARCEIRO'
-  },
-  TECH: {
-    torre: 'TECH',
-    dataRFS: 'DT_RFS',
-    valorBrutoSN: 'VL_BRUTO_SN',
-    produto: 'DS_PRODUTO',
-    tipoGanhoDetalhe: 'TIPO_GANHO_DETALHE',
-    cnpj: 'CNPJ',
-    cliente: 'CLIENTE',
-    parceiro: 'PARCEIRO'
-  }
-};
+interface LinhaRawPlanilha {
+  NR_CNPJ: string;
+  NM_CLIENTE: string;
+  TP_SOLICITACAO: string;
+  PEDIDO_SN: string;
+  TP_PRODUTO: string;
+  DS_PRODUTO: string;
+  DT_RFB: any;
+  NM_REDE?: string;
+  [key: string]: any; // Permite outras colunas
+}
 
 /**
- * Importa dados de uma planilha Excel com base na torre específica
+ * Interface para grupo de pedidos IP Dedicado
+ */
+interface GrupoIPDedicado {
+  pedidoSN: string;
+  cnpj: string;
+  cliente: string;
+  pedidosRelacionados: {
+    pedidoSN: string;
+    produto: string;
+    valor: number;
+  }[];
+  valorTotal: number;
+  dataAtivacao: Date;
+  tipoSolicitacao: string;
+  nomeRede?: string;
+}
+
+/**
+ * Agrupa pedidos de IP Dedicado com seus produtos relacionados
+ */
+function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, GrupoIPDedicado> {
+  const grupos = new Map<string, GrupoIPDedicado>();
+
+  // Identifica pedidos principais (IP Dedicado)
+  linhas.forEach(linha => {
+    const produto = linha.DS_PRODUTO?.toLowerCase() || '';
+    const pedidoSN = linha.PEDIDO_SN;
+    const cnpj = linha.NR_CNPJ;
+
+    if (produto.includes('ip dedicado')) {
+      grupos.set(pedidoSN, {
+        pedidoSN,
+        cnpj,
+        cliente: linha.NM_CLIENTE,
+        pedidosRelacionados: [{
+          pedidoSN,
+          produto: linha.DS_PRODUTO,
+          valor: normalizarValor(linha.VL_BRUTO_SN || 0)
+        }],
+        valorTotal: normalizarValor(linha.VL_BRUTO_SN || 0),
+        dataAtivacao: normalizarData(linha.DT_RFB),
+        tipoSolicitacao: linha.TP_SOLICITACAO,
+        nomeRede: linha.NM_REDE
+      });
+    }
+  });
+
+  // Agrupa produtos relacionados (Monitora Dados e IP Internet)
+  linhas.forEach(linha => {
+    const produto = linha.DS_PRODUTO?.toLowerCase() || '';
+    const cnpj = linha.NR_CNPJ;
+    const pedidoSN = linha.PEDIDO_SN;
+
+    if (produto.includes('monitora dados') || produto.includes('ip internet')) {
+      // Procura o grupo correspondente pelo CNPJ
+      for (const [, grupo] of grupos.entries()) {
+        if (grupo.cnpj === cnpj) {
+          // Adiciona o pedido relacionado
+          grupo.pedidosRelacionados.push({
+            pedidoSN,
+            produto: linha.DS_PRODUTO,
+            valor: normalizarValor(linha.VL_BRUTO_SN || 0)
+          });
+          grupo.valorTotal += normalizarValor(linha.VL_BRUTO_SN || 0);
+          break;
+        }
+      }
+    }
+  });
+
+  return grupos;
+}
+
+/**
+ * Importa dados de uma planilha Excel com as colunas corretas
  */
 export function importarPlanilhaExcel(
   arquivo: File,
@@ -261,64 +292,88 @@ export function importarPlanilhaExcel(
         const worksheet = workbook.Sheets[sheetName];
 
         // Converte para JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as LinhaRawPlanilha[];
+
+        // Agrupa pedidos de IP Dedicado
+        const gruposIPDedicado = agruparPedidosIPDedicado(jsonData);
+
+        // IDs de pedidos já processados
+        const pedidosProcessados = new Set<string>();
 
         // Processa cada linha aplicando as regras corretas
-        const vendas = jsonData
-          .map((row: any, index): RegistroVenda | null => {
-            const id = `venda-${mapeamento.torre}-${Date.now()}-${index}`;
+        const vendas: RegistroVenda[] = [];
 
-            // Extrai dados obrigatórios
-            const dataAtivacao = normalizarData(row[mapeamento.dataRFS]);
-            const produto = row[mapeamento.produto] || '';
+        jsonData.forEach((row, index) => {
+          const pedidoSN = row.PEDIDO_SN;
+          const produto = row.DS_PRODUTO || '';
+          const tipoSolicitacao = row.TP_SOLICITACAO || '';
 
-            // Se não houver produto, ignora a linha
-            if (!produto) return null;
+          // Se não houver produto ou pedido, ignora
+          if (!produto || !pedidoSN) return;
 
-            // Extrai TIPO_GANHO_DETALHE
-            const tipoGanhoRaw = mapeamento.tipoGanhoDetalhe
-              ? row[mapeamento.tipoGanhoDetalhe]
-              : '';
-            const tipoGanho = identificarTipoGanho(tipoGanhoRaw);
+          // Se já foi processado como parte de um grupo, pula
+          if (pedidosProcessados.has(pedidoSN)) return;
 
-            // REGRA IMPORTANTE: Só considera receita se TIPO_GANHO_DETALHE for "GANHO"
-            let valorBrutoSN = 0;
-            if (tipoGanho === 'GANHO') {
-              valorBrutoSN = normalizarValor(row[mapeamento.valorBrutoSN]);
+          // Verifica se é IP Dedicado (pedido principal)
+          if (gruposIPDedicado.has(pedidoSN)) {
+            const grupo = gruposIPDedicado.get(pedidoSN)!;
+
+            // Marca todos os pedidos do grupo como processados
+            grupo.pedidosRelacionados.forEach(p => pedidosProcessados.add(p.pedidoSN));
+
+            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
+            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
+                tipoSolicitacao.toLowerCase().includes('migra')) {
+              return; // Pula migrações
             }
 
-            // Determina tipo de venda baseado no tipoGanho
-            const tipoVenda: TipoVenda = tipoGanho === 'MIGRACAO' ? 'MIGRACAO' : 'VENDA';
+            // Cria registro agrupado
+            vendas.push({
+              id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
+              pedidoSN: grupo.pedidoSN,
+              dataAtivacao: grupo.dataAtivacao,
+              valorBrutoSN: grupo.valorTotal,
+              tipoVenda: 'VENDA',
+              tipoSolicitacao: grupo.tipoSolicitacao,
+              parceiro: identificarParceiro(grupo.nomeRede || ''),
+              produto: `IP Dedicado (${grupo.pedidosRelacionados.length} produtos)`,
+              tipoProduto: row.TP_PRODUTO || '',
+              categoria: 'DADOS_AVANCADOS',
+              cnpj: grupo.cnpj,
+              nomeCliente: grupo.cliente,
+              nomeRede: grupo.nomeRede,
+              areaAtuacao: 'DENTRO',
+              torre: mapeamento.torre,
+              pedidosAgrupados: grupo.pedidosRelacionados.map(p => p.pedidoSN)
+            });
+          } else if (!isProdutoIPDedicado(produto)) {
+            // Processa produtos normais (não relacionados a IP Dedicado)
 
-            // Dados opcionais
-            const parceiro = mapeamento.parceiro
-              ? identificarParceiro(row[mapeamento.parceiro] || '')
-              : 'JCL';
-            const cnpj = mapeamento.cnpj ? row[mapeamento.cnpj] || '' : '';
-            const nomeCliente = mapeamento.cliente ? row[mapeamento.cliente] || 'Cliente não especificado' : 'Cliente não especificado';
-            const areaAtuacao = mapeamento.area
-              ? identificarAreaAtuacao(row[mapeamento.area] || 'DENTRO')
-              : 'DENTRO';
+            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
+            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
+                tipoSolicitacao.toLowerCase().includes('migra')) {
+              return; // Pula migrações
+            }
 
-            // Identifica categoria baseada na torre e produto
-            const categoria = identificarCategoriaProduto(produto);
-
-            return {
-              id,
-              dataAtivacao,
-              valorBrutoSN,
-              tipoVenda,
-              tipoGanho,
-              parceiro,
+            vendas.push({
+              id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
+              pedidoSN,
+              dataAtivacao: normalizarData(row.DT_RFB),
+              valorBrutoSN: normalizarValor(row.VL_BRUTO_SN || 0),
+              tipoVenda: identificarTipoVenda(tipoSolicitacao),
+              tipoSolicitacao,
+              parceiro: identificarParceiro(row.NM_REDE || ''),
               produto,
-              categoria,
-              cnpj,
-              nomeCliente,
-              areaAtuacao,
+              tipoProduto: row.TP_PRODUTO || '',
+              categoria: identificarCategoriaProduto(produto),
+              cnpj: row.NR_CNPJ,
+              nomeCliente: row.NM_CLIENTE,
+              nomeRede: row.NM_REDE,
+              areaAtuacao: 'DENTRO',
               torre: mapeamento.torre
-            };
-          })
-          .filter((venda): venda is RegistroVenda => venda !== null); // Remove nulls
+            });
+          }
+        });
 
         resolve(vendas);
       } catch (error) {
@@ -335,11 +390,35 @@ export function importarPlanilhaExcel(
 }
 
 /**
+ * Interface para mapeamento de colunas específicas por torre
+ */
+export interface MapeamentoColunas {
+  torre: import('../types/certification').TorrePlanilha;
+}
+
+/**
+ * Mapeamentos padrão para cada torre
+ * Agora as colunas são fixas e lidas pelos nomes corretos
+ */
+export const MAPEAMENTOS_PADRAO: Record<import('../types/certification').TorrePlanilha, MapeamentoColunas> = {
+  AVANCADOS: {
+    torre: 'AVANCADOS'
+  },
+  TI_GUD: {
+    torre: 'TI_GUD'
+  },
+  TECH: {
+    torre: 'TECH'
+  }
+};
+
+/**
  * Exporta dados para Excel
  */
 export function exportarParaExcel(vendas: RegistroVenda[], nomeArquivo: string = 'vendas.xlsx'): void {
   // Prepara dados para exportação
   const dadosExport = vendas.map(venda => ({
+    'Pedido SN': venda.pedidoSN,
     'Data Ativação': venda.dataAtivacao.toLocaleDateString('pt-BR'),
     'Cliente': venda.nomeCliente,
     'CNPJ': venda.cnpj,
@@ -348,7 +427,7 @@ export function exportarParaExcel(vendas: RegistroVenda[], nomeArquivo: string =
     'Valor Bruto SN': venda.valorBrutoSN.toFixed(2),
     'Tipo': venda.tipoVenda,
     'Parceiro': venda.parceiro,
-    'Área': venda.areaAtuacao
+    'Pedidos Agrupados': venda.pedidosAgrupados?.join(', ') || ''
   }));
 
   // Cria workbook e worksheet

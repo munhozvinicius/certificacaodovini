@@ -112,17 +112,21 @@ export type TipoGanho = 'GANHO' | 'PERDA' | 'MIGRACAO';
 // Registro de venda/ativação
 export interface RegistroVenda {
   id: string;
-  dataAtivacao: Date; // DT_RFS
-  valorBrutoSN: number; // VL_BRUTO_SN
+  pedidoSN: string; // PEDIDO_SN (coluna R)
+  dataAtivacao: Date; // DT_RFB (coluna AO)
+  valorBrutoSN: number; // Valor calculado/agrupado
   tipoVenda: TipoVenda;
-  tipoGanho?: TipoGanho; // TIPO_GANHO_DETALHE
+  tipoSolicitacao?: string; // TP_SOLICITACAO (coluna H) - "VENDA" ou "MIGRAÇÃOVENDA"
   parceiro: ParceiroVivo;
   areaAtuacao: AreaAtuacao;
   categoria: 'DADOS_AVANCADOS' | 'VOZ_AVANCADA' | 'DIGITAL_TI' | 'NOVOS_PRODUTOS' | 'LOCACAO_EQUIPAMENTOS' | 'LICENCAS';
-  produto: string; // DS_PRODUTO
-  cnpj: string;
-  nomeCliente: string;
+  tipoProduto: string; // TP_PRODUTO (coluna T)
+  produto: string; // DS_PRODUTO (coluna U)
+  cnpj: string; // NR_CNPJ (coluna D)
+  nomeCliente: string; // NM_CLIENTE (coluna E)
+  nomeRede?: string; // NM_REDE (coluna BE)
   torre: TorrePlanilha;
+  pedidosAgrupados?: string[]; // Para IP Dedicado: lista dos pedidos agrupados
 }
 
 // Resultado de cálculo mensal
