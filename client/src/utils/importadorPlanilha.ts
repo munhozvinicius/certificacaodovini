@@ -351,17 +351,33 @@ export function importarPlanilhaExcel(
 
         console.log(`\n========== INÍCIO DO PROCESSAMENTO ==========`);
         console.log(`Total de linhas no arquivo: ${jsonData.length}`);
-        console.log(`Primeiras 3 linhas (amostra):`);
-        jsonData.slice(0, 3).forEach((row, i) => {
-          console.log(`\nLinha ${i + 1}:`);
+
+        // Mostra as colunas disponíveis
+        if (jsonData.length > 0) {
+          const colunas = Object.keys(jsonData[0]);
+          console.log(`\n📋 COLUNAS DISPONÍVEIS (${colunas.length} colunas):`);
+          console.log(colunas.join(', '));
+        }
+
+        console.log(`\n📊 PRIMEIRAS 5 LINHAS (AMOSTRA COMPLETA):`);
+        jsonData.slice(0, 5).forEach((row, i) => {
+          console.log(`\n━━━━━━━━━━ LINHA ${i + 1} ━━━━━━━━━━`);
           console.log(`  CNPJ: ${row.NR_CNPJ} (tipo: ${typeof row.NR_CNPJ})`);
           console.log(`  Cliente: ${row.NM_CLIENTE}`);
           console.log(`  Tipo: ${row.TP_SOLICITACAO}`);
           console.log(`  Pedido: ${row.PEDIDO_SN}`);
-          console.log(`  Produto: ${row.DS_PRODUTO}`);
-          console.log(`  Valor: ${row.VL_BRUTO_SN} (tipo: ${typeof row.VL_BRUTO_SN})`);
+          console.log(`  Tipo Produto: ${row.TP_PRODUTO}`);
+          console.log(`  Desc Produto: ${row.DS_PRODUTO}`);
+          console.log(`  Valor Bruto: ${row.VL_BRUTO_SN} (tipo: ${typeof row.VL_BRUTO_SN})`);
           console.log(`  Data RFB: ${row.DT_RFB}`);
           console.log(`  Rede: ${row.NM_REDE}`);
+
+          // Mostra TODAS as colunas que têm "VL" ou "VALOR" no nome
+          Object.keys(row).forEach(key => {
+            if (key.toLowerCase().includes('vl') || key.toLowerCase().includes('valor')) {
+              console.log(`  [VALOR] ${key}: ${row[key]}`);
+            }
+          });
         });
 
         // Agrupa pedidos de IP Dedicado
@@ -373,19 +389,28 @@ export function importarPlanilhaExcel(
         // Processa cada linha aplicando as regras corretas
         const vendas: RegistroVenda[] = [];
 
+        console.log(`\n🔍 PROCESSANDO ${jsonData.length} LINHAS...`);
+
         jsonData.forEach((row, index) => {
           const pedidoSN = row.PEDIDO_SN;
           const produto = row.DS_PRODUTO || '';
           const tipoSolicitacao = row.TP_SOLICITACAO || '';
           const cliente = row.NM_CLIENTE || '';
           const valorBruto = row.VL_BRUTO_SN || 0;
+          const parceiro = row.NM_REDE || '';
+
+          console.log(`\n[${index + 1}/${jsonData.length}] ${cliente} - ${produto}`);
+          console.log(`  Pedido: ${pedidoSN}, Tipo: ${tipoSolicitacao}, Valor: ${valorBruto}, Parceiro: ${parceiro}`);
 
           // Se não houver produto ou pedido, ignora
-          if (!produto || !pedidoSN) return;
+          if (!produto || !pedidoSN) {
+            console.log(`  ❌ SKIP: Produto ou pedido vazio`);
+            return;
+          }
 
           // Se já foi processado como parte de um grupo, pula
           if (pedidosProcessados.has(pedidoSN)) {
-            console.log(`[SKIP] Pedido ${pedidoSN} já processado (agrupamento IP)`);
+            console.log(`  ⏭️  SKIP: Já processado (agrupamento IP)`);
             return;
           }
 
@@ -398,13 +423,13 @@ export function importarPlanilhaExcel(
 
             // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
             if (!tipoSolicitacao.toLowerCase().includes('venda')) {
-              console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
+              console.log(`  ❌ SKIP: Tipo não contém "VENDA" - Tipo: ${tipoSolicitacao}`);
               return; // Pula apenas tipos que NÃO contêm "venda"
             }
 
-            console.log(`[GRUPO IP] Cliente: ${grupo.cliente}, Pedidos: ${grupo.pedidosRelacionados.length}, Valor Total: R$ ${grupo.valorTotal.toFixed(2)}`);
+            console.log(`  ✅ ACEITO [GRUPO IP] - Valor Total: R$ ${grupo.valorTotal.toFixed(2)}`);
             grupo.pedidosRelacionados.forEach(p => {
-              console.log(`  → ${p.pedidoSN}: ${p.produto} = R$ ${p.valor.toFixed(2)}`);
+              console.log(`     → ${p.pedidoSN}: ${p.produto} = R$ ${p.valor.toFixed(2)}`);
             });
 
             // Cria registro agrupado
@@ -431,13 +456,13 @@ export function importarPlanilhaExcel(
 
             // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
             if (!tipoSolicitacao.toLowerCase().includes('venda')) {
-              console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
+              console.log(`  ❌ SKIP: Tipo não contém "VENDA" - Tipo: ${tipoSolicitacao}`);
               return; // Pula apenas tipos que NÃO contêm "venda"
             }
 
             const valorNormalizado = normalizarValor(valorBruto);
             const categoria = identificarCategoriaProduto(produto);
-            console.log(`[VENDA] Cliente: ${cliente}, Pedido: ${pedidoSN}, Produto: ${produto}, Categoria: ${categoria}, Valor: R$ ${valorNormalizado.toFixed(2)}`);
+            console.log(`  ✅ ACEITO [${categoria}] - Valor: R$ ${valorNormalizado.toFixed(2)}`);
 
             vendas.push({
               id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
@@ -457,12 +482,29 @@ export function importarPlanilhaExcel(
               torre: mapeamento.torre
             });
           } else {
-            console.log(`[SKIP] Pedido ${pedidoSN} - Produto relacionado a IP mas não é principal: ${produto}`);
+            console.log(`  ⏭️  SKIP: Produto relacionado a IP mas não é principal (será agrupado)`);
           }
         });
 
-        console.log(`\n[RESUMO] Total de vendas processadas: ${vendas.length}`);
-        console.log(`[RESUMO] Receita total: R$ ${vendas.reduce((acc, v) => acc + v.valorBrutoSN, 0).toFixed(2)}`);
+        console.log(`\n`);
+        console.log(`========== RESUMO FINAL ==========`);
+        console.log(`📊 Total de vendas processadas: ${vendas.length}`);
+        console.log(`💰 Receita total: R$ ${vendas.reduce((acc, v) => acc + v.valorBrutoSN, 0).toFixed(2)}`);
+
+        // Agrupa por categoria
+        const porCategoria = vendas.reduce((acc, v) => {
+          acc[v.categoria] = (acc[v.categoria] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log(`📦 Por categoria:`, porCategoria);
+
+        // Agrupa por parceiro
+        const porParceiro = vendas.reduce((acc, v) => {
+          acc[v.parceiro] = (acc[v.parceiro] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log(`🤝 Por parceiro:`, porParceiro);
+        console.log(`==================================\n`);
 
         resolve(vendas);
       } catch (error) {
