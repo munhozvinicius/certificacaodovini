@@ -127,6 +127,13 @@ export interface RegistroVenda {
   nomeRede?: string; // NM_REDE (coluna BE)
   torre: TorrePlanilha;
   pedidosAgrupados?: string[]; // Para IP Dedicado: lista dos pedidos agrupados
+  segmento?: string;
+  statusSimulacao?: string;
+  statusPedidoSN?: string;
+  resultadoSimplifique?: string;
+  statusPedidoSimplificado?: string;
+  dataPedidoSN?: Date | null;
+  dataConclusaoSimulacao?: Date | null;
 }
 
 // Resultado de cálculo mensal

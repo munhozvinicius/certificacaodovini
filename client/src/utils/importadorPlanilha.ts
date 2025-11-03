@@ -94,18 +94,67 @@ export function identificarParceiro(parceiro: string): ParceiroVivo {
  * Normaliza valor monetário de diferentes formatos
  */
 export function normalizarValor(valor: any): number {
-  if (typeof valor === 'number') return valor;
+  if (valor === null || valor === undefined) return 0;
+
+  if (typeof valor === 'number') {
+    return Number.isNaN(valor) ? 0 : valor;
+  }
 
   if (typeof valor === 'string') {
-    // Remove símbolos de moeda e espaços
-    let valorLimpo = valor.replace(/[R$\s]/g, '');
-    // Substitui vírgula por ponto
-    valorLimpo = valorLimpo.replace(',', '.');
-    // Remove pontos de milhares (ex: 1.000.00 -> 1000.00)
-    valorLimpo = valorLimpo.replace(/\.(?=\d{3})/g, '');
+    const valorTrim = valor.trim();
 
-    const numero = parseFloat(valorLimpo);
-    return isNaN(numero) ? 0 : numero;
+    if (!valorTrim || /^(null|nulo|nan)$/i.test(valorTrim)) {
+      return 0;
+    }
+
+    const negativo = valorTrim.includes('-');
+
+    // Mantém apenas dígitos, separadores decimais e de milhares
+    let valorNumerico = valorTrim.replace(/-/g, '');
+    valorNumerico = valorNumerico.replace(/[^0-9.,]/g, '');
+
+    if (!valorNumerico) {
+      return 0;
+    }
+
+    const ultimoPonto = valorNumerico.lastIndexOf('.');
+    const ultimaVirgula = valorNumerico.lastIndexOf(',');
+
+    let separadorDecimal = '';
+    if (ultimaVirgula > ultimoPonto) {
+      separadorDecimal = ',';
+    } else if (ultimoPonto > -1) {
+      separadorDecimal = '.';
+    }
+
+    let parteInteira = valorNumerico;
+    let parteDecimal = '';
+
+    if (separadorDecimal) {
+      const partes = valorNumerico.split(separadorDecimal);
+      parteDecimal = partes.pop() ?? '';
+      parteInteira = partes.join('');
+
+      parteInteira = parteInteira.replace(/[^0-9]/g, '');
+      parteDecimal = parteDecimal.replace(/[^0-9]/g, '');
+
+      // Se houver mais de 2 dígitos decimais, provavelmente é separador de milhares
+      if (parteDecimal.length > 2) {
+        parteInteira += parteDecimal;
+        parteDecimal = '';
+      }
+    } else {
+      parteInteira = parteInteira.replace(/[^0-9]/g, '');
+    }
+
+    const valorNormalizado = parteDecimal ? `${parteInteira}.${parteDecimal}` : parteInteira;
+    const numero = parseFloat(valorNormalizado);
+
+    if (Number.isNaN(numero)) {
+      return 0;
+    }
+
+    return negativo ? -numero : numero;
   }
 
   return 0;
@@ -115,36 +164,7 @@ export function normalizarValor(valor: any): number {
  * Normaliza data de diferentes formatos
  */
 export function normalizarData(data: any): Date {
-  if (data instanceof Date) return data;
-
-  if (typeof data === 'string') {
-    // Tenta diferentes formatos de data
-    // DD/MM/YYYY
-    const regexBR = /(\d{2})\/(\d{2})\/(\d{4})/;
-    const matchBR = data.match(regexBR);
-    if (matchBR) {
-      const [, dia, mes, ano] = matchBR;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-
-    // YYYY-MM-DD
-    const regexISO = /(\d{4})-(\d{2})-(\d{2})/;
-    const matchISO = data.match(regexISO);
-    if (matchISO) {
-      const [, ano, mes, dia] = matchISO;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
-    }
-  }
-
-  // Se for número (Excel serial date)
-  if (typeof data === 'number') {
-    // Excel usa 1/1/1900 como base
-    const excelEpoch = new Date(1899, 11, 30);
-    const msPerDay = 24 * 60 * 60 * 1000;
-    return new Date(excelEpoch.getTime() + data * msPerDay);
-  }
-
-  return new Date(); // Default: data atual
+  return tentarConverterData(data) ?? new Date();
 }
 
 /**
@@ -184,17 +204,256 @@ export function isProdutoIPDedicado(produto: string): boolean {
 }
 
 /**
+ * Normaliza nomes de colunas para facilitar o mapeamento
+ */
+function normalizarNomeColuna(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Conjunto de variações conhecidas para cada coluna importante
+ */
+const VARIACOES_COLUNAS: Record<string, string[]> = {
+  NR_CNPJ: ['CNPJ', 'NR CNPJ', 'CPF/CNPJ', 'DOCUMENTO', 'CNPJ CLIENTE'],
+  NM_CLIENTE: ['CLIENTE', 'NOME CLIENTE', 'RAZAO SOCIAL', 'NOME'],
+  TP_SOLICITACAO: ['TP SOLICITACAO', 'TIPO SOLICITACAO', 'TIPO DA SOLICITACAO', 'TIPO DE SOLICITACAO'],
+  PEDIDO_SN: ['PEDIDO SN', 'PEDIDO', 'NUMERO PEDIDO', 'NR PEDIDO SN', 'PEDIDOSN', 'PEDIDO SERVICE NOW'],
+  TP_PRODUTO: ['TP PRODUTO', 'TIPO PRODUTO', 'FAMILIA PRODUTO'],
+  DS_PRODUTO: ['PRODUTO', 'DESCRICAO PRODUTO', 'DESCRIÇÃO PRODUTO', 'NOME PRODUTO'],
+  DT_RFB: ['DT RFB', 'DATA RFB', 'DATA ATIVACAO', 'DATA ATIVAÇÃO', 'DT ATIVACAO', 'DATA RFB ATIVACAO'],
+  NM_REDE: ['NM REDE', 'REDE', 'NOME REDE', 'PARCEIRO', 'NOME PARCEIRO', 'CANAL'],
+  VL_BRUTO_SN: ['VALOR BRUTO SN', 'VALOR BRUTO', 'VL BRUTO SN', 'VL BRUTO', 'VALOR VENDA', 'VALOR TOTAL', 'VL PROPOSTA', 'VALOR PROPOSTA', 'VALOR LIQUIDO'],
+  VL_LIQUIDO_SN: ['VALOR LIQUIDO SN', 'VALOR LIQUIDO', 'VL LIQUIDO', 'VALOR NET', 'VALOR LIQUIDO TOTAL'],
+  DS_STATUS_SIMULACAO: ['STATUS SIMULACAO', 'STATUS SIMULAÇÃO'],
+  DS_SEGMENTO: ['SEGMENTO', 'DS SEGMENTO'],
+  DT_PEDIDO_SN: ['DATA PEDIDO', 'DATA PEDIDO SN', 'DT PEDIDO SN'],
+  DT_CONCLUSAO_SIMULACAO: ['DATA CONCLUSAO', 'DATA CONCLUSÃO', 'DT CONCLUSAO', 'DT CONCLUSAO SIMULACAO'],
+  TP_RESULTADO: ['RESULTADO', 'TIPO RESULTADO', 'TP RESULTADO'],
+  STATUS_PEDIDO_SN: ['STATUS PEDIDO', 'STATUS PEDIDO SN'],
+  DS_STATUS_PEDIDO_REAL_SIMPLIFICADO: ['STATUS PEDIDO REAL', 'STATUS PEDIDO REAL SIMPLIFICADO', 'STATUS SIMPLIFICADO']
+};
+
+const CAMPOS_VALOR_PRIORIDADE = [
+  'VL_BRUTO_SN',
+  'VALOR_BRUTO_SN',
+  'VL_BRUTO',
+  'VALOR_BRUTO',
+  'VL_LIQUIDO_SN',
+  'VALOR_LIQUIDO_SN',
+  'VL_LIQUIDO',
+  'VALOR_LIQUIDO',
+  'VALOR_TOTAL',
+  'VALOR',
+  'VALOR_PROPOSTA',
+  'VL_PROPOSTA',
+  'VL_PROPOSTA_LIQUIDO',
+  'VALOR_VENDA',
+  'VALOR_PEDIDO'
+];
+
+function tentarConverterData(data: any): Date | null {
+  if (data === null || data === undefined || data === '') {
+    return null;
+  }
+
+  if (data instanceof Date) {
+    return Number.isNaN(data.getTime()) ? null : data;
+  }
+
+  if (typeof data === 'number') {
+    const excelEpoch = new Date(1899, 11, 30);
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const resultado = new Date(excelEpoch.getTime() + data * msPerDay);
+    return Number.isNaN(resultado.getTime()) ? null : resultado;
+  }
+
+  if (typeof data === 'string') {
+    const texto = data.trim();
+
+    if (!texto || /^(null|nulo)$/i.test(texto)) {
+      return null;
+    }
+
+    const regexBR = /(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/;
+    const matchBR = texto.match(regexBR);
+    if (matchBR) {
+      const [, dia, mes, ano, hora = '0', minuto = '0', segundo = '0'] = matchBR;
+      const resultado = new Date(
+        parseInt(ano, 10),
+        parseInt(mes, 10) - 1,
+        parseInt(dia, 10),
+        parseInt(hora, 10),
+        parseInt(minuto, 10),
+        parseInt(segundo, 10)
+      );
+      return Number.isNaN(resultado.getTime()) ? null : resultado;
+    }
+
+    const regexISO = /(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/;
+    const matchISO = texto.match(regexISO);
+    if (matchISO) {
+      const [, ano, mes, dia, hora = '0', minuto = '0', segundo = '0'] = matchISO;
+      const resultado = new Date(
+        parseInt(ano, 10),
+        parseInt(mes, 10) - 1,
+        parseInt(dia, 10),
+        parseInt(hora, 10),
+        parseInt(minuto, 10),
+        parseInt(segundo, 10)
+      );
+      return Number.isNaN(resultado.getTime()) ? null : resultado;
+    }
+
+    const timestamp = Date.parse(texto);
+    if (!Number.isNaN(timestamp)) {
+      return new Date(timestamp);
+    }
+  }
+
+  return null;
+}
+
+function normalizarDataOpcional(data: any): Date | null {
+  return tentarConverterData(data);
+}
+
+function obterTextoCampo(valor: any): string | undefined {
+  if (valor === null || valor === undefined) {
+    return undefined;
+  }
+
+  if (typeof valor === 'string') {
+    const texto = valor.trim();
+    if (!texto || /^(null|nulo)$/i.test(texto)) {
+      return undefined;
+    }
+    return texto;
+  }
+
+  if (typeof valor === 'number') {
+    if (Number.isNaN(valor)) return undefined;
+    return valor.toString();
+  }
+
+  return String(valor);
+}
+
+function mapearColunasLinha(linha: LinhaRawPlanilha): LinhaRawPlanilha {
+  const linhaNormalizada: LinhaRawPlanilha = { ...linha };
+  const mapaOriginais: Record<string, string> = {};
+
+  Object.keys(linha).forEach(chave => {
+    mapaOriginais[normalizarNomeColuna(chave)] = chave;
+  });
+
+  Object.entries(VARIACOES_COLUNAS).forEach(([colunaPadrao, variacoes]) => {
+    if (linhaNormalizada[colunaPadrao] !== undefined && linhaNormalizada[colunaPadrao] !== null) {
+      return;
+    }
+
+    for (const variacao of [colunaPadrao, ...variacoes]) {
+      const chaveNormalizada = normalizarNomeColuna(variacao);
+      const chaveOriginal = mapaOriginais[chaveNormalizada];
+
+      if (chaveOriginal !== undefined) {
+        const valorOriginal = linha[chaveOriginal];
+        linhaNormalizada[colunaPadrao] = typeof valorOriginal === 'string'
+          ? valorOriginal.trim()
+          : valorOriginal;
+        break;
+      }
+    }
+  });
+
+  return linhaNormalizada;
+}
+
+function normalizarLinhasPlanilha(linhas: LinhaRawPlanilha[]): LinhaRawPlanilha[] {
+  return linhas.map(linha => {
+    const normalizada = mapearColunasLinha(linha);
+    Object.keys(normalizada).forEach(chave => {
+      const valor = normalizada[chave];
+      if (typeof valor === 'string') {
+        normalizada[chave] = valor.trim();
+      }
+    });
+    return normalizada;
+  });
+}
+
+function obterValorMonetarioLinha(linha: LinhaRawPlanilha): number {
+  for (const campo of CAMPOS_VALOR_PRIORIDADE) {
+    const valorCampo = linha[campo];
+    if (valorCampo !== undefined && valorCampo !== null && valorCampo !== '') {
+      const valorNormalizado = normalizarValor(valorCampo);
+      if (valorNormalizado !== 0) {
+        return valorNormalizado;
+      }
+      const textoCampo = obterTextoCampo(valorCampo);
+      if (textoCampo !== undefined) {
+        return 0;
+      }
+    }
+  }
+
+  return 0;
+}
+
+function detectarSeparadorCSV(conteudo: string): string {
+  const primeiraLinha = conteudo.split(/\r?\n/)[0] || '';
+  const candidatos = [';', ',', '	'];
+  let melhorSeparador = ',';
+  let maiorContagem = 0;
+
+  for (const candidato of candidatos) {
+    const contagem = primeiraLinha.split(candidato).length - 1;
+    if (contagem > maiorContagem) {
+      maiorContagem = contagem;
+      melhorSeparador = candidato;
+    }
+  }
+
+  return melhorSeparador;
+}
+
+function extrairMetadadosPedido(linha: LinhaRawPlanilha) {
+  return {
+    statusSimulacao: obterTextoCampo(linha.DS_STATUS_SIMULACAO),
+    statusPedidoSN: obterTextoCampo(linha.STATUS_PEDIDO_SN),
+    resultadoSimplifique: obterTextoCampo(linha.TP_RESULTADO),
+    statusPedidoSimplificado: obterTextoCampo(linha.DS_STATUS_PEDIDO_REAL_SIMPLIFICADO),
+    segmento: obterTextoCampo(linha.DS_SEGMENTO),
+    dataPedidoSN: normalizarDataOpcional(linha.DT_PEDIDO_SN),
+    dataConclusaoSimulacao: normalizarDataOpcional(linha.DT_CONCLUSAO_SIMULACAO)
+  };
+}
+
+/**
  * Interface para linha bruta da planilha
  */
 interface LinhaRawPlanilha {
-  NR_CNPJ: string;
-  NM_CLIENTE: string;
-  TP_SOLICITACAO: string;
-  PEDIDO_SN: string;
-  TP_PRODUTO: string;
-  DS_PRODUTO: string;
-  DT_RFB: any;
+  NR_CNPJ?: string;
+  NM_CLIENTE?: string;
+  TP_SOLICITACAO?: string;
+  PEDIDO_SN?: string | number;
+  TP_PRODUTO?: string;
+  DS_PRODUTO?: string;
+  DT_RFB?: any;
   NM_REDE?: string;
+  VL_BRUTO_SN?: any;
+  VL_LIQUIDO_SN?: any;
+  VALOR?: any;
+  DS_STATUS_SIMULACAO?: string;
+  DS_SEGMENTO?: string;
+  DT_PEDIDO_SN?: any;
+  DT_CONCLUSAO_SIMULACAO?: any;
+  TP_RESULTADO?: string;
+  STATUS_PEDIDO_SN?: string;
+  DS_STATUS_PEDIDO_REAL_SIMPLIFICADO?: string;
   [key: string]: any; // Permite outras colunas
 }
 
@@ -204,6 +463,7 @@ interface LinhaRawPlanilha {
 interface GrupoIPDedicado {
   pedidoSN: string;
   cnpj: string;
+  cnpjNormalizado: string;
   cliente: string;
   pedidosRelacionados: {
     pedidoSN: string;
@@ -224,45 +484,54 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
 
   // Identifica pedidos principais (IP Dedicado)
   linhas.forEach(linha => {
-    const produto = linha.DS_PRODUTO?.toLowerCase() || '';
-    const pedidoSN = linha.PEDIDO_SN;
-    const cnpj = linha.NR_CNPJ;
+    const produto = obterTextoCampo(linha.DS_PRODUTO)?.toLowerCase() || '';
+    const pedidoSN = obterTextoCampo(linha.PEDIDO_SN) || '';
+    const cnpjOriginal = obterTextoCampo(linha.NR_CNPJ) || '';
+    const cnpjNormalizado = cnpjOriginal.replace(/\D/g, '');
+
+    if (!produto || !pedidoSN || !cnpjOriginal) return;
 
     if (produto.includes('ip dedicado')) {
+      const valorLinha = obterValorMonetarioLinha(linha);
       grupos.set(pedidoSN, {
         pedidoSN,
-        cnpj,
-        cliente: linha.NM_CLIENTE,
+        cnpj: cnpjOriginal,
+        cnpjNormalizado,
+        cliente: obterTextoCampo(linha.NM_CLIENTE) || '',
         pedidosRelacionados: [{
           pedidoSN,
-          produto: linha.DS_PRODUTO,
-          valor: normalizarValor(linha.VL_BRUTO_SN || 0)
+          produto: obterTextoCampo(linha.DS_PRODUTO) || '',
+          valor: valorLinha
         }],
-        valorTotal: normalizarValor(linha.VL_BRUTO_SN || 0),
+        valorTotal: valorLinha,
         dataAtivacao: normalizarData(linha.DT_RFB),
-        tipoSolicitacao: linha.TP_SOLICITACAO,
-        nomeRede: linha.NM_REDE
+        tipoSolicitacao: obterTextoCampo(linha.TP_SOLICITACAO) || '',
+        nomeRede: obterTextoCampo(linha.NM_REDE)
       });
     }
   });
 
   // Agrupa produtos relacionados (Monitora Dados e IP Internet)
   linhas.forEach(linha => {
-    const produto = linha.DS_PRODUTO?.toLowerCase() || '';
-    const cnpj = linha.NR_CNPJ;
-    const pedidoSN = linha.PEDIDO_SN;
+    const produto = obterTextoCampo(linha.DS_PRODUTO)?.toLowerCase() || '';
+    const cnpjOriginal = obterTextoCampo(linha.NR_CNPJ) || '';
+    const pedidoSN = obterTextoCampo(linha.PEDIDO_SN) || '';
+
+    if (!produto || !cnpjOriginal || !pedidoSN) return;
 
     if (produto.includes('monitora dados') || produto.includes('ip internet')) {
       // Procura o grupo correspondente pelo CNPJ
+      const cnpjNormalizado = cnpjOriginal.replace(/\D/g, '');
       for (const [, grupo] of grupos.entries()) {
-        if (grupo.cnpj === cnpj) {
+        if (grupo.cnpjNormalizado === cnpjNormalizado) {
           // Adiciona o pedido relacionado
+          const valorLinha = obterValorMonetarioLinha(linha);
           grupo.pedidosRelacionados.push({
             pedidoSN,
-            produto: linha.DS_PRODUTO,
-            valor: normalizarValor(linha.VL_BRUTO_SN || 0)
+            produto: obterTextoCampo(linha.DS_PRODUTO) || '',
+            valor: valorLinha
           });
-          grupo.valorTotal += normalizarValor(linha.VL_BRUTO_SN || 0);
+          grupo.valorTotal += valorLinha;
           break;
         }
       }
@@ -281,21 +550,41 @@ export function importarPlanilhaExcel(
 ): Promise<RegistroVenda[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    const isCSV = arquivo.name.toLowerCase().endsWith('.csv');
 
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+
+        if (!data) {
+          throw new Error('Arquivo vazio');
+        }
+
+        let workbook: XLSX.WorkBook;
+
+        if (isCSV) {
+          const conteudo = data as string;
+          const separador = detectarSeparadorCSV(conteudo);
+          workbook = XLSX.read(conteudo, { type: 'string', raw: false, FS: separador });
+        } else {
+          const arrayBuffer = data as ArrayBuffer;
+          workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+        }
 
         // Pega a primeira planilha
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
         // Converte para JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as LinhaRawPlanilha[];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+          defval: '',
+          raw: false
+        }) as LinhaRawPlanilha[];
+
+        const linhasNormalizadas = normalizarLinhasPlanilha(jsonData);
 
         // Agrupa pedidos de IP Dedicado
-        const gruposIPDedicado = agruparPedidosIPDedicado(jsonData);
+        const gruposIPDedicado = agruparPedidosIPDedicado(linhasNormalizadas);
 
         // IDs de pedidos já processados
         const pedidosProcessados = new Set<string>();
@@ -303,10 +592,10 @@ export function importarPlanilhaExcel(
         // Processa cada linha aplicando as regras corretas
         const vendas: RegistroVenda[] = [];
 
-        jsonData.forEach((row, index) => {
-          const pedidoSN = row.PEDIDO_SN;
-          const produto = row.DS_PRODUTO || '';
-          const tipoSolicitacao = row.TP_SOLICITACAO || '';
+        linhasNormalizadas.forEach((row, index) => {
+          const pedidoSN = obterTextoCampo(row.PEDIDO_SN) || '';
+          const produto = obterTextoCampo(row.DS_PRODUTO) || '';
+          const tipoSolicitacao = obterTextoCampo(row.TP_SOLICITACAO) || '';
 
           // Se não houver produto ou pedido, ignora
           if (!produto || !pedidoSN) return;
@@ -317,6 +606,7 @@ export function importarPlanilhaExcel(
           // Verifica se é IP Dedicado (pedido principal)
           if (gruposIPDedicado.has(pedidoSN)) {
             const grupo = gruposIPDedicado.get(pedidoSN)!;
+            const metadados = extrairMetadadosPedido(row);
 
             // Marca todos os pedidos do grupo como processados
             grupo.pedidosRelacionados.forEach(p => pedidosProcessados.add(p.pedidoSN));
@@ -344,7 +634,8 @@ export function importarPlanilhaExcel(
               nomeRede: grupo.nomeRede,
               areaAtuacao: 'DENTRO',
               torre: mapeamento.torre,
-              pedidosAgrupados: grupo.pedidosRelacionados.map(p => p.pedidoSN)
+              pedidosAgrupados: grupo.pedidosRelacionados.map(p => p.pedidoSN),
+              ...metadados
             });
           } else if (!isProdutoIPDedicado(produto)) {
             // Processa produtos normais (não relacionados a IP Dedicado)
@@ -355,22 +646,26 @@ export function importarPlanilhaExcel(
               return; // Pula migrações
             }
 
+            const metadados = extrairMetadadosPedido(row);
+            const valorBruto = obterValorMonetarioLinha(row);
+
             vendas.push({
               id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
               pedidoSN,
               dataAtivacao: normalizarData(row.DT_RFB),
-              valorBrutoSN: normalizarValor(row.VL_BRUTO_SN || 0),
+              valorBrutoSN: valorBruto,
               tipoVenda: identificarTipoVenda(tipoSolicitacao),
               tipoSolicitacao,
               parceiro: identificarParceiro(row.NM_REDE || ''),
               produto,
               tipoProduto: row.TP_PRODUTO || '',
               categoria: identificarCategoriaProduto(produto),
-              cnpj: row.NR_CNPJ,
-              nomeCliente: row.NM_CLIENTE,
-              nomeRede: row.NM_REDE,
+              cnpj: obterTextoCampo(row.NR_CNPJ) || '',
+              nomeCliente: obterTextoCampo(row.NM_CLIENTE) || '',
+              nomeRede: obterTextoCampo(row.NM_REDE),
               areaAtuacao: 'DENTRO',
-              torre: mapeamento.torre
+              torre: mapeamento.torre,
+              ...metadados
             });
           }
         });
@@ -385,7 +680,11 @@ export function importarPlanilhaExcel(
       reject(new Error('Erro ao ler arquivo'));
     };
 
-    reader.readAsBinaryString(arquivo);
+    if (isCSV) {
+      reader.readAsText(arquivo, 'utf-8');
+    } else {
+      reader.readAsArrayBuffer(arquivo);
+    }
   });
 }
 
