@@ -396,11 +396,10 @@ export function importarPlanilhaExcel(
             // Marca todos os pedidos do grupo como processados
             grupo.pedidosRelacionados.forEach(p => pedidosProcessados.add(p.pedidoSN));
 
-            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
-            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
-                tipoSolicitacao.toLowerCase().includes('migra')) {
+            // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
+            if (!tipoSolicitacao.toLowerCase().includes('venda')) {
               console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
-              return; // Pula migrações
+              return; // Pula apenas tipos que NÃO contêm "venda"
             }
 
             console.log(`[GRUPO IP] Cliente: ${grupo.cliente}, Pedidos: ${grupo.pedidosRelacionados.length}, Valor Total: R$ ${grupo.valorTotal.toFixed(2)}`);
@@ -430,11 +429,10 @@ export function importarPlanilhaExcel(
           } else if (!isProdutoIPDedicado(produto)) {
             // Processa produtos normais (não relacionados a IP Dedicado)
 
-            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
-            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
-                tipoSolicitacao.toLowerCase().includes('migra')) {
+            // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
+            if (!tipoSolicitacao.toLowerCase().includes('venda')) {
               console.log(`[SKIP] Pedido ${pedidoSN} ignorado - Tipo: ${tipoSolicitacao}`);
-              return; // Pula migrações
+              return; // Pula apenas tipos que NÃO contêm "venda"
             }
 
             const valorNormalizado = normalizarValor(valorBruto);
