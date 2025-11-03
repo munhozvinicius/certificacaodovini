@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle } from 'lucide-react';
 import type { RegistroVenda, TorrePlanilha } from '../types/certification';
-import { importarPlanilhaExcel, validarArquivoExcel, MAPEAMENTOS_PADRAO } from '../utils/importadorPlanilha';
+import {
+  importarPlanilhaExcel,
+  validarArquivoExcel,
+  MAPEAMENTOS_PADRAO,
+  normalizarValor
+} from '../utils/importadorPlanilha';
 import ListaPedidos from './ListaPedidos';
 import './ImportadorPlanilhas.css';
 
@@ -9,13 +14,25 @@ interface ImportadorPlanilhasProps {
   onVendasImportadas: (vendas: RegistroVenda[]) => void;
 }
 
+type CampoEdicao =
+  | 'pedidoSN'
+  | 'valorBrutoSN'
+  | 'nomeCliente'
+  | 'produto'
+  | 'dataAtivacao'
+  | 'categoria'
+  | 'nomeRede'
+  | 'parceiro';
+
 export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPlanilhasProps) {
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [torreSelecionada, setTorreSelecionada] = useState<TorrePlanilha>('AVANCADOS');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState(false);
-  const [vendasImportadas, setVendasImportadas] = useState<RegistroVenda[]>([]);
+  const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
+  const [vendasEmRevisao, setVendasEmRevisao] = useState<RegistroVenda[]>([]);
+  const [vendasProcessadas, setVendasProcessadas] = useState<RegistroVenda[]>([]);
+  const [emRevisao, setEmRevisao] = useState(false);
 
   const handleArquivoSelecionado = (event: React.ChangeEvent<HTMLInputElement>) => {
     const arquivoSelecionado = event.target.files?.[0];
@@ -35,27 +52,75 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
 
     setCarregando(true);
     setErro(null);
-    setSucesso(false);
+    setMensagemSucesso(null);
 
     try {
-      // Usa o mapeamento padrão para a torre selecionada
       const mapeamento = MAPEAMENTOS_PADRAO[torreSelecionada];
-
       const vendas = await importarPlanilhaExcel(arquivo, mapeamento);
-      onVendasImportadas(vendas);
-      setVendasImportadas(vendas);
-      setSucesso(true);
+
+      setVendasEmRevisao(vendas);
+      setEmRevisao(true);
+      setMensagemSucesso('Revise os pedidos importados, ajuste valores ou exclua entradas antes de processar.');
+
       setArquivo(null);
 
-      // Reset file input
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
-
     } catch (error) {
       setErro(`Erro ao importar planilha: ${error}`);
     } finally {
       setCarregando(false);
     }
+  };
+
+  const handleCancelarRevisao = () => {
+    setVendasEmRevisao([]);
+    setEmRevisao(false);
+    setMensagemSucesso(null);
+  };
+
+  const handleEditarVenda = (id: string, campo: CampoEdicao, valor: string) => {
+    setVendasEmRevisao(prev => prev.map(venda => {
+      if (venda.id !== id) return venda;
+
+      switch (campo) {
+        case 'valorBrutoSN':
+          return { ...venda, valorBrutoSN: normalizarValor(valor) };
+        case 'dataAtivacao':
+          return { ...venda, dataAtivacao: valor ? new Date(`${valor}T00:00:00`) : venda.dataAtivacao };
+        case 'categoria':
+          return { ...venda, categoria: valor as RegistroVenda['categoria'] };
+        case 'parceiro':
+          return { ...venda, parceiro: valor as RegistroVenda['parceiro'] };
+        case 'nomeRede':
+          return { ...venda, nomeRede: valor };
+        case 'pedidoSN':
+          return { ...venda, pedidoSN: valor };
+        case 'nomeCliente':
+          return { ...venda, nomeCliente: valor };
+        case 'produto':
+          return { ...venda, produto: valor };
+        default:
+          return venda;
+      }
+    }));
+  };
+
+  const handleRemoverVenda = (id: string) => {
+    setVendasEmRevisao(prev => prev.filter(venda => venda.id !== id));
+  };
+
+  const handleConfirmarProcessamento = () => {
+    if (vendasEmRevisao.length === 0) {
+      setErro('Nenhum pedido selecionado para processamento.');
+      return;
+    }
+
+    onVendasImportadas(vendasEmRevisao);
+    setVendasProcessadas(vendasEmRevisao);
+    setVendasEmRevisao([]);
+    setEmRevisao(false);
+    setMensagemSucesso('Pedidos processados e enviados para o dashboard com sucesso!');
   };
 
   return (
@@ -67,14 +132,13 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
           <p>Faça upload das planilhas de ativação para processar automaticamente</p>
         </div>
 
-        {/* Seletor de Torre */}
         <div className="torre-selector">
           <label htmlFor="torre-select">Selecione a Torre/Planilha:</label>
           <select
             id="torre-select"
             className="select"
             value={torreSelecionada}
-            onChange={(e) => setTorreSelecionada(e.target.value as TorrePlanilha)}
+            onChange={(event) => setTorreSelecionada(event.target.value as TorrePlanilha)}
           >
             <option value="AVANCADOS">Avançados (Dados/Voz)</option>
             <option value="TI_GUD">TI / GUD</option>
@@ -116,10 +180,10 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
           </div>
         )}
 
-        {sucesso && (
+        {mensagemSucesso && (
           <div className="message success-message">
             <CheckCircle size={20} />
-            <span>Planilha importada com sucesso!</span>
+            <span>{mensagemSucesso}</span>
           </div>
         )}
 
@@ -134,7 +198,9 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
         </div>
 
         <div className="importador-info glass-card">
-          <h3>Colunas Esperadas - Torre {torreSelecionada === 'AVANCADOS' ? 'Avançados' : torreSelecionada === 'TI_GUD' ? 'TI/GUD' : 'Tech'}</h3>
+          <h3>
+            Colunas Esperadas - Torre {torreSelecionada === 'AVANCADOS' ? 'Avançados' : torreSelecionada === 'TI_GUD' ? 'TI/GUD' : 'Tech'}
+          </h3>
           <ul>
             <li><strong>Coluna D - NR_CNPJ:</strong> CNPJ do cliente</li>
             <li><strong>Coluna E - NM_CLIENTE:</strong> Nome do cliente</li>
@@ -149,8 +215,8 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
           <div className="regra-importante">
             <strong>⚠️ Regras Importantes:</strong>
             <p><strong>1. Tipo de Solicitação:</strong> Apenas registros com <strong>TP_SOLICITACAO = "VENDA"</strong> serão contabilizados</p>
-            <p><strong>2. IP Dedicado:</strong> Quando o produto for "IP Dedicado", os pedidos com <strong>"Monitora Dados"</strong> e <strong>"IP Internet"</strong> do mesmo cliente (CNPJ) serão automaticamente agrupados e somados</p>
-            <p>Migrações não computam receita para a certificação</p>
+            <p><strong>2. IP Dedicado:</strong> Pedidos com <strong>"Monitora Dados"</strong> e <strong>"IP Internet"</strong> do mesmo cliente são agrupados automaticamente ao pedido principal.</p>
+            <p><strong>3. Revisão Manual:</strong> Ajuste valores e parceiros antes de processar para garantir fidelidade dos relatórios.</p>
           </div>
 
           <div className="colunas-opcionais">
@@ -162,8 +228,24 @@ export default function ImportadorPlanilhas({ onVendasImportadas }: ImportadorPl
         </div>
       </div>
 
-      {/* Lista de Pedidos Importados */}
-      <ListaPedidos vendas={vendasImportadas} />
+      {emRevisao && (
+        <ListaPedidos
+          titulo="Revisar pedidos antes do processamento"
+          vendas={vendasEmRevisao}
+          modoEdicao
+          onEditar={handleEditarVenda}
+          onRemover={handleRemoverVenda}
+          onConfirmar={handleConfirmarProcessamento}
+          onCancelar={handleCancelarRevisao}
+        />
+      )}
+
+      {!emRevisao && vendasProcessadas.length > 0 && (
+        <ListaPedidos
+          titulo="Última importação processada"
+          vendas={vendasProcessadas}
+        />
+      )}
     </div>
   );
 }

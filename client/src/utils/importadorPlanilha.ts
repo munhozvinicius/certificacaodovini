@@ -107,54 +107,73 @@ export function normalizarValor(valor: any): number {
       return 0;
     }
 
-    const negativo = valorTrim.includes('-');
+    const ehNegativo = /-/.test(valorTrim) || (/^\(/.test(valorTrim) && /\)$/.test(valorTrim));
+    const valorSemParenteses = valorTrim.replace(/[()]/g, '');
+    const apenasSeparadores = valorSemParenteses.replace(/[^0-9.,-]/g, '');
 
-    // Mantém apenas dígitos, separadores decimais e de milhares
-    let valorNumerico = valorTrim.replace(/-/g, '');
-    valorNumerico = valorNumerico.replace(/[^0-9.,]/g, '');
-
-    if (!valorNumerico) {
+    const somenteNumeros = apenasSeparadores.replace(/[^0-9]/g, '');
+    if (!somenteNumeros) {
       return 0;
     }
 
-    const ultimoPonto = valorNumerico.lastIndexOf('.');
-    const ultimaVirgula = valorNumerico.lastIndexOf(',');
+    const criarCandidato = (separadorDecimal: ',' | '.' | null) => {
+      const textoBase = apenasSeparadores.replace(/-/g, '');
+      let valorProcessado = textoBase;
 
-    let separadorDecimal = '';
-    if (ultimaVirgula > ultimoPonto) {
-      separadorDecimal = ',';
-    } else if (ultimoPonto > -1) {
-      separadorDecimal = '.';
-    }
-
-    let parteInteira = valorNumerico;
-    let parteDecimal = '';
-
-    if (separadorDecimal) {
-      const partes = valorNumerico.split(separadorDecimal);
-      parteDecimal = partes.pop() ?? '';
-      parteInteira = partes.join('');
-
-      parteInteira = parteInteira.replace(/[^0-9]/g, '');
-      parteDecimal = parteDecimal.replace(/[^0-9]/g, '');
-
-      // Se houver mais de 2 dígitos decimais, provavelmente é separador de milhares
-      if (parteDecimal.length > 2) {
-        parteInteira += parteDecimal;
-        parteDecimal = '';
+      if (separadorDecimal === ',' || separadorDecimal === '.') {
+        const separadorMilhar = separadorDecimal === ',' ? '.' : ',';
+        const regexMilhar = new RegExp(`\\${separadorMilhar}`, 'g');
+        valorProcessado = valorProcessado.replace(regexMilhar, '');
+        const regexDecimal = new RegExp(`\\${separadorDecimal}`, 'g');
+        valorProcessado = valorProcessado.replace(regexDecimal, '.');
+      } else {
+        valorProcessado = valorProcessado.replace(/[^0-9]/g, '');
       }
-    } else {
-      parteInteira = parteInteira.replace(/[^0-9]/g, '');
-    }
 
-    const valorNormalizado = parteDecimal ? `${parteInteira}.${parteDecimal}` : parteInteira;
-    const numero = parseFloat(valorNormalizado);
+      const numero = parseFloat(valorProcessado);
+      const indiceSeparador = separadorDecimal ? apenasSeparadores.lastIndexOf(separadorDecimal) : -1;
+      const digitosDecimais = indiceSeparador === -1
+        ? 0
+        : apenasSeparadores
+            .slice(indiceSeparador + 1)
+            .replace(/[^0-9]/g, '')
+            .length;
 
-    if (Number.isNaN(numero)) {
-      return 0;
-    }
+      return {
+        numero: Number.isNaN(numero) ? 0 : numero,
+        digitosDecimais,
+        separadorDecimal
+      };
+    };
 
-    return negativo ? -numero : numero;
+    const candidatos = [criarCandidato(','), criarCandidato('.'), criarCandidato(null)]
+      .filter(c => c.numero !== 0 || somenteNumeros !== '0');
+
+    const pontuarCandidato = (candidato: { numero: number; digitosDecimais: number; separadorDecimal: ',' | '.' | null }) => {
+      if (candidato.digitosDecimais > 0 && candidato.digitosDecimais <= 2) return 0;
+      if (candidato.digitosDecimais === 0) return 1;
+      return 2;
+    };
+
+    candidatos.sort((a, b) => {
+      const scoreA = pontuarCandidato(a);
+      const scoreB = pontuarCandidato(b);
+
+      if (scoreA !== scoreB) {
+        return scoreA - scoreB;
+      }
+
+      if (a.digitosDecimais !== b.digitosDecimais) {
+        return b.digitosDecimais - a.digitosDecimais;
+      }
+
+      return b.numero - a.numero;
+    });
+
+    const melhor = candidatos[0];
+    const resultado = melhor ? melhor.numero : 0;
+
+    return ehNegativo ? -resultado : resultado;
   }
 
   return 0;
@@ -520,20 +539,61 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
     if (!produto || !cnpjOriginal || !pedidoSN) return;
 
     if (produto.includes('monitora dados') || produto.includes('ip internet')) {
-      // Procura o grupo correspondente pelo CNPJ
-      const cnpjNormalizado = cnpjOriginal.replace(/\D/g, '');
-      for (const [, grupo] of grupos.entries()) {
-        if (grupo.cnpjNormalizado === cnpjNormalizado) {
-          // Adiciona o pedido relacionado
-          const valorLinha = obterValorMonetarioLinha(linha);
-          grupo.pedidosRelacionados.push({
+      const valorLinha = obterValorMonetarioLinha(linha);
+      const descricaoProduto = obterTextoCampo(linha.DS_PRODUTO) || '';
+      const dataLinha = normalizarDataOpcional(linha.DT_RFB);
+
+      // Primeiro tenta casar diretamente pelo número do pedido
+      if (grupos.has(pedidoSN)) {
+        const grupoDireto = grupos.get(pedidoSN)!;
+        if (!grupoDireto.pedidosRelacionados.some(p => p.pedidoSN === pedidoSN)) {
+          grupoDireto.pedidosRelacionados.push({
             pedidoSN,
-            produto: obterTextoCampo(linha.DS_PRODUTO) || '',
+            produto: descricaoProduto,
             valor: valorLinha
           });
-          grupo.valorTotal += valorLinha;
-          break;
+          grupoDireto.valorTotal += valorLinha;
         }
+        return;
+      }
+
+      const cnpjNormalizado = cnpjOriginal.replace(/\D/g, '');
+      const candidatos = Array.from(grupos.values()).filter(grupo => grupo.cnpjNormalizado === cnpjNormalizado);
+
+      if (candidatos.length === 0) {
+        return;
+      }
+
+      let grupoSelecionado = candidatos[0];
+
+      if (candidatos.length > 1) {
+        const candidatosOrdenados = candidatos
+          .map(grupo => ({
+            grupo,
+            diferenca: dataLinha
+              ? Math.abs(grupo.dataAtivacao.getTime() - dataLinha.getTime())
+              : Number.POSITIVE_INFINITY
+          }))
+          .sort((a, b) => a.diferenca - b.diferenca);
+
+        const melhorPorData = candidatosOrdenados.find(c => c.diferenca !== Number.POSITIVE_INFINITY);
+        if (melhorPorData) {
+          grupoSelecionado = melhorPorData.grupo;
+        } else {
+          const porSimilaridade = candidatos.find(grupo => grupo.pedidoSN.slice(0, 6) === pedidoSN.slice(0, 6));
+          if (porSimilaridade) {
+            grupoSelecionado = porSimilaridade;
+          }
+        }
+      }
+
+      if (!grupoSelecionado.pedidosRelacionados.some(p => p.pedidoSN === pedidoSN)) {
+        grupoSelecionado.pedidosRelacionados.push({
+          pedidoSN,
+          produto: descricaoProduto,
+          valor: valorLinha
+        });
+        grupoSelecionado.valorTotal += valorLinha;
       }
     }
   });
