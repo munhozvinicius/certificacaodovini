@@ -12,11 +12,20 @@ import {
   Target
 } from 'lucide-react';
 import type { ResultadoCiclo, RegistroVenda } from '../types/certification';
+import { CLASSIFICACOES, PARCEIRO_LABELS, PARCEIROS_VIVO } from '../types/certification';
 import {
   getNomeClassificacao,
   formatarMoeda,
-  formatarPontuacao
+  formatarPontuacao,
+  agruparVendasPorMes,
+  calcularResultadoMensal
 } from '../utils/calculoCertificacao';
+import {
+  VISAO_PARCEIRO_OPCOES,
+  type VisaoParceiro,
+  obterRotuloParceiro,
+  normalizarParceiroValor
+} from '../utils/parceiros';
 import {
   FAIXAS_DADOS_AVANCADOS,
   FAIXAS_VOZ_AVANCADA,
@@ -55,6 +64,11 @@ type CategoriaResumo = {
   vendas: RegistroVenda[];
 };
 
+type AlertaDashboard = {
+  tipo: 'info' | 'risco';
+  mensagem: string;
+};
+
 const CATEGORIAS_CONFIG: Record<RegistroVenda['categoria'], { titulo: string; faixas: FaixaReceita[] }> = {
   DADOS_AVANCADOS: { titulo: 'Dados Avançados', faixas: FAIXAS_DADOS_AVANCADOS },
   VOZ_AVANCADA: { titulo: 'Voz Avançada', faixas: FAIXAS_VOZ_AVANCADA },
@@ -62,6 +76,12 @@ const CATEGORIAS_CONFIG: Record<RegistroVenda['categoria'], { titulo: string; fa
   NOVOS_PRODUTOS: { titulo: 'Novos Produtos', faixas: FAIXAS_NOVOS_PRODUTOS },
   LOCACAO_EQUIPAMENTOS: { titulo: 'Locação de Equipamentos', faixas: FAIXAS_LOCACAO_EQUIPAMENTOS },
   LICENCAS: { titulo: 'Licenças', faixas: FAIXAS_LICENCAS }
+};
+
+const TORRE_LABELS: Record<RegistroVenda['torre'], string> = {
+  AVANCADOS: 'Avançados',
+  TI_GUD: 'TI / GUD',
+  TECH: 'Tech'
 };
 
 function obterFaixaAtual(receita: number, faixas: FaixaReceita[]): FaixaReceita {
@@ -118,14 +138,14 @@ function formatarChaveMes(ano: number, mes: number): string {
 }
 
 function formatarNomeParceiro(parceiro: RegistroVenda['parceiro']): string {
-  if (parceiro === 'SAFE_TI') return 'SAFE/TI';
-  if (parceiro === 'JCL') return 'JLC';
-  return 'Tech';
+  return PARCEIRO_LABELS[normalizarParceiroValor(parceiro)];
 }
 
 export default function Dashboard({ resultado, vendas }: DashboardProps) {
   const [mesSelecionado, setMesSelecionado] = useState<string | null>(null);
   const [categoriaAberta, setCategoriaAberta] = useState<RegistroVenda['categoria'] | null>(null);
+  const [visaoParceiro, setVisaoParceiro] = useState<VisaoParceiro>('TODOS');
+  const [detalhesMensaisAbertos, setDetalhesMensaisAbertos] = useState(false);
 
   useEffect(() => {
     if (!resultado) {
@@ -147,6 +167,10 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     const ultimo = ordenados[ordenados.length - 1];
     setMesSelecionado(formatarChaveMes(ultimo.ano, ultimo.mes));
   }, [resultado]);
+
+  useEffect(() => {
+    setDetalhesMensaisAbertos(false);
+  }, [mesSelecionado]);
 
   if (!resultado || vendas.length === 0) {
     return (
@@ -187,35 +211,72 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
     return resultadosMensais.find(r => formatarChaveMes(r.ano, r.mes) === mesSelecionado) ?? null;
   }, [mesSelecionado, resultadosMensais]);
 
-  const vendasDoMes = useMemo(() => {
-    if (!mesSelecionado) return [] as RegistroVenda[];
-    return vendas.filter(venda => formatarChaveMes(venda.dataAtivacao.getFullYear(), venda.dataAtivacao.getMonth() + 1) === mesSelecionado);
-  }, [mesSelecionado, vendas]);
+  const vendasNormalizadas = useMemo(
+    () => vendas.map(venda => ({ ...venda, parceiro: normalizarParceiroValor(venda.parceiro) })),
+    [vendas]
+  );
 
-  const timelineData = useMemo(() => resultadosMensais.map(r => ({
-    mes: `${r.mes.toString().padStart(2, '0')}/${r.ano}`,
-    dadosAvancados: r.receitaDadosAvancados,
-    vozAvancada: r.receitaVozAvancada,
-    digitalTI: r.receitaDigitalTI,
-    total: r.receitaDadosAvancados + r.receitaVozAvancada + r.receitaDigitalTI + r.receitaNovosProdutos + r.receitaLocacaoEquipamentos + r.receitaLicencas
-  })), [resultadosMensais]);
+  const vendasPorMes = useMemo(() => agruparVendasPorMes(vendasNormalizadas), [vendasNormalizadas]);
+
+  const vendasDoMesSelecionado = useMemo(() => {
+    if (!mesSelecionado) return [] as RegistroVenda[];
+    return vendasNormalizadas.filter(venda =>
+      formatarChaveMes(venda.dataAtivacao.getFullYear(), venda.dataAtivacao.getMonth() + 1) === mesSelecionado
+    );
+  }, [mesSelecionado, vendasNormalizadas]);
+
+  const vendasDoMesFiltradas = useMemo(() => {
+    if (visaoParceiro === 'TODOS') {
+      return vendasDoMesSelecionado;
+    }
+    return vendasDoMesSelecionado.filter(venda => venda.parceiro === visaoParceiro);
+  }, [visaoParceiro, vendasDoMesSelecionado]);
+
+  const resumoMensalFiltrado = useMemo(() => {
+    if (!mesSelecionado) return null;
+    const [anoStr, mesStr] = mesSelecionado.split('-');
+    const anoNumero = Number(anoStr);
+    const mesNumero = Number(mesStr);
+    return calcularResultadoMensal(mesNumero, anoNumero, vendasDoMesFiltradas);
+  }, [mesSelecionado, vendasDoMesFiltradas]);
+
+  const timelineData = useMemo(() => resultadosMensais.map(r => {
+    const chave = formatarChaveMes(r.ano, r.mes);
+    const vendasMes = vendasPorMes.get(chave) ?? [];
+    const vendasVisao = visaoParceiro === 'TODOS'
+      ? vendasMes
+      : vendasMes.filter(venda => venda.parceiro === visaoParceiro);
+    const calculado = calcularResultadoMensal(r.mes, r.ano, vendasVisao);
+    return {
+      mes: `${r.mes.toString().padStart(2, '0')}/${r.ano}`,
+      dadosAvancados: calculado.receitaDadosAvancados,
+      vozAvancada: calculado.receitaVozAvancada,
+      digitalTI: calculado.receitaDigitalTI,
+      total:
+        calculado.receitaDadosAvancados +
+        calculado.receitaVozAvancada +
+        calculado.receitaDigitalTI +
+        calculado.receitaNovosProdutos +
+        calculado.receitaLocacaoEquipamentos +
+        calculado.receitaLicencas
+    };
+  }), [resultadosMensais, vendasPorMes, visaoParceiro]);
 
   const resumoParceiros = useMemo(() => {
-    const mapa = new Map<RegistroVenda['parceiro'], { parceiro: RegistroVenda['parceiro']; receita: number; pedidos: number }>();
-    vendasDoMes.forEach(venda => {
-      if (!mapa.has(venda.parceiro)) {
-        mapa.set(venda.parceiro, { parceiro: venda.parceiro, receita: 0, pedidos: 0 });
-      }
-      const item = mapa.get(venda.parceiro)!;
-      item.receita += venda.valorBrutoSN;
-      item.pedidos += 1;
-    });
-    return Array.from(mapa.values()).sort((a, b) => b.receita - a.receita);
-  }, [vendasDoMes]);
+    return PARCEIROS_VIVO.map(parceiro => {
+      const vendasParceiro = vendasDoMesSelecionado.filter(venda => venda.parceiro === parceiro);
+      const receita = vendasParceiro.reduce((acc, venda) => acc + venda.valorBrutoSN, 0);
+      return {
+        parceiro,
+        receita,
+        pedidos: vendasParceiro.length
+      };
+    }).sort((a, b) => b.receita - a.receita);
+  }, [vendasDoMesSelecionado]);
 
   const produtosResumo = useMemo(() => {
     const mapa = new Map<string, { produto: string; categoria: RegistroVenda['categoria']; receita: number; pedidos: number }>();
-    vendasDoMes.forEach(venda => {
+    vendasDoMesFiltradas.forEach(venda => {
       if (!mapa.has(venda.produto)) {
         mapa.set(venda.produto, { produto: venda.produto, categoria: venda.categoria, receita: 0, pedidos: 0 });
       }
@@ -224,24 +285,24 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
       item.pedidos += 1;
     });
     return Array.from(mapa.values()).sort((a, b) => b.receita - a.receita).slice(0, 6);
-  }, [vendasDoMes]);
+  }, [vendasDoMesFiltradas]);
 
   const categoriasResumo: CategoriaResumo[] = useMemo(() => {
-    if (!resumoMensalSelecionado) return [];
+    if (!resumoMensalFiltrado) return [];
 
     const base: Array<{ chave: RegistroVenda['categoria']; receita: number; pontos: number }> = [
-      { chave: 'DADOS_AVANCADOS', receita: resumoMensalSelecionado.receitaDadosAvancados, pontos: resumoMensalSelecionado.pontosDadosAvancados },
-      { chave: 'VOZ_AVANCADA', receita: resumoMensalSelecionado.receitaVozAvancada, pontos: resumoMensalSelecionado.pontosVozAvancada },
-      { chave: 'DIGITAL_TI', receita: resumoMensalSelecionado.receitaDigitalTI, pontos: resumoMensalSelecionado.pontosDigitalTI },
-      { chave: 'NOVOS_PRODUTOS', receita: resumoMensalSelecionado.receitaNovosProdutos, pontos: resumoMensalSelecionado.pontosNovosProdutos },
-      { chave: 'LOCACAO_EQUIPAMENTOS', receita: resumoMensalSelecionado.receitaLocacaoEquipamentos, pontos: resumoMensalSelecionado.pontosLocacaoEquipamentos },
-      { chave: 'LICENCAS', receita: resumoMensalSelecionado.receitaLicencas, pontos: resumoMensalSelecionado.pontosLicencas }
+      { chave: 'DADOS_AVANCADOS', receita: resumoMensalFiltrado.receitaDadosAvancados, pontos: resumoMensalFiltrado.pontosDadosAvancados },
+      { chave: 'VOZ_AVANCADA', receita: resumoMensalFiltrado.receitaVozAvancada, pontos: resumoMensalFiltrado.pontosVozAvancada },
+      { chave: 'DIGITAL_TI', receita: resumoMensalFiltrado.receitaDigitalTI, pontos: resumoMensalFiltrado.pontosDigitalTI },
+      { chave: 'NOVOS_PRODUTOS', receita: resumoMensalFiltrado.receitaNovosProdutos, pontos: resumoMensalFiltrado.pontosNovosProdutos },
+      { chave: 'LOCACAO_EQUIPAMENTOS', receita: resumoMensalFiltrado.receitaLocacaoEquipamentos, pontos: resumoMensalFiltrado.pontosLocacaoEquipamentos },
+      { chave: 'LICENCAS', receita: resumoMensalFiltrado.receitaLicencas, pontos: resumoMensalFiltrado.pontosLicencas }
     ];
 
     return base.map(item => {
       const { titulo, faixas } = CATEGORIAS_CONFIG[item.chave];
       const progresso = calcularProgressoCategoria(item.receita, faixas);
-      const vendasCategoria = vendasDoMes.filter(venda => venda.categoria === item.chave);
+      const vendasCategoria = vendasDoMesFiltradas.filter(venda => venda.categoria === item.chave);
 
       return {
         chave: item.chave,
@@ -255,24 +316,96 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
         vendas: vendasCategoria
       };
     });
-  }, [resumoMensalSelecionado, vendasDoMes]);
+  }, [resumoMensalFiltrado, vendasDoMesFiltradas]);
 
-  const pontosMesSelecionado = resumoMensalSelecionado?.pontosTotal ?? 0;
-  const receitaMesSelecionado = resumoMensalSelecionado
-    ? resumoMensalSelecionado.receitaDadosAvancados +
-      resumoMensalSelecionado.receitaVozAvancada +
-      resumoMensalSelecionado.receitaDigitalTI +
-      resumoMensalSelecionado.receitaNovosProdutos +
-      resumoMensalSelecionado.receitaLocacaoEquipamentos +
-      resumoMensalSelecionado.receitaLicencas
+  const pontosMesSelecionado = resumoMensalFiltrado?.pontosTotal ?? 0;
+  const receitaMesSelecionado = resumoMensalFiltrado
+    ? resumoMensalFiltrado.receitaDadosAvancados +
+      resumoMensalFiltrado.receitaVozAvancada +
+      resumoMensalFiltrado.receitaDigitalTI +
+      resumoMensalFiltrado.receitaNovosProdutos +
+      resumoMensalFiltrado.receitaLocacaoEquipamentos +
+      resumoMensalFiltrado.receitaLicencas
     : 0;
 
   const nomeMesSelecionado = resumoMensalSelecionado
     ? obterNomeMes(resumoMensalSelecionado.mes, resumoMensalSelecionado.ano)
     : 'Período não selecionado';
 
+  const parceiroVisaoLabel = visaoParceiro === 'TODOS'
+    ? 'Todos os parceiros'
+    : obterRotuloParceiro(visaoParceiro);
+
+  const totalPedidosVisao = vendasDoMesFiltradas.length;
+
+  const proximaClassificacao = useMemo(() => {
+    const indiceAtual = CLASSIFICACOES.findIndex(item => item.classificacao === classificacao);
+    if (indiceAtual === -1 || indiceAtual === CLASSIFICACOES.length - 1) {
+      return null;
+    }
+    return CLASSIFICACOES[indiceAtual + 1];
+  }, [classificacao]);
+
+  const pontosRestantesProximaClassificacao = proximaClassificacao
+    ? Math.max(0, proximaClassificacao.pontuacaoMinima - pontuacaoMedia)
+    : 0;
+
+  const alertas = useMemo<AlertaDashboard[]>(() => {
+    const itens: AlertaDashboard[] = [];
+
+    if (visaoParceiro !== 'TODOS' && totalPedidosVisao === 0) {
+      itens.push({
+        tipo: 'risco',
+        mensagem: `${obterRotuloParceiro(visaoParceiro)} não possui pedidos registrados em ${nomeMesSelecionado}.`
+      });
+    }
+
+    categoriasResumo.forEach(categoria => {
+      if (categoria.proximaFaixa && categoria.faltaParaProxima > 0 && categoria.faltaParaProxima <= 1000) {
+        itens.push({
+          tipo: 'info',
+          mensagem: `${categoria.titulo}: faltam ${formatarMoeda(categoria.faltaParaProxima)} para alcançar a faixa ${categoria.proximaFaixa.faixa}.`
+        });
+      }
+    });
+
+    if (proximaClassificacao && pontosRestantesProximaClassificacao > 0) {
+      itens.push({
+        tipo: 'info',
+        mensagem: `Faltam ${formatarPontuacao(pontosRestantesProximaClassificacao)} pontos em média para atingir ${getNomeClassificacao(proximaClassificacao.classificacao)}.`
+      });
+    }
+
+    return itens;
+  }, [visaoParceiro, totalPedidosVisao, nomeMesSelecionado, categoriasResumo, proximaClassificacao, pontosRestantesProximaClassificacao]);
+
+  const periodoTexto = `${resultado.periodoInicio.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })} — ${resultado.periodoFim.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}`;
+
+  const resumoParceirosCiclo = useMemo(() => {
+    return PARCEIROS_VIVO.map(parceiro => {
+      const vendasParceiro = vendasNormalizadas.filter(venda => venda.parceiro === parceiro);
+      const receita = vendasParceiro.reduce((acc, venda) => acc + venda.valorBrutoSN, 0);
+      return {
+        parceiro,
+        receita,
+        pedidos: vendasParceiro.length
+      };
+    }).sort((a, b) => b.receita - a.receita);
+  }, [vendasNormalizadas]);
+
+  const handleAbrirDetalhes = () => {
+    setDetalhesMensaisAbertos(true);
+  };
+
+  const handleGerarOnePager = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
+
   return (
-    <div className="dashboard-container fade-in">
+    <>
+      <div className="dashboard-container fade-in">
       <div className="summary-cards">
         <div className="summary-card glass-card">
           <div className="card-header">
@@ -341,33 +474,75 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
               <Activity size={18} />
               Performance de {nomeMesSelecionado}
             </h3>
-            <p>Receita consolidada com pontuação calculada conforme o manual de certificação.</p>
+            <p>
+              Visão de <strong>{parceiroVisaoLabel}</strong>. Ajuste a jornada antes de consolidar a certificação.
+            </p>
           </div>
-          <div className="highlight-metrics">
-            <div>
-              <span>Receita</span>
-              <strong>{formatarMoeda(receitaMesSelecionado)}</strong>
+          <div className="highlight-controls">
+            <div className="partner-vision-control">
+              <span className="control-label">Visão por parceiro</span>
+              <div className="partner-vision-buttons">
+                {VISAO_PARCEIRO_OPCOES.map(opcao => (
+                  <button
+                    key={opcao.valor}
+                    type="button"
+                    className={`toggle-button ${visaoParceiro === opcao.valor ? 'ativo' : ''}`}
+                    onClick={() => setVisaoParceiro(opcao.valor)}
+                  >
+                    {opcao.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <span>Pontos</span>
-              <strong>{formatarPontuacao(pontosMesSelecionado)}</strong>
-            </div>
-            <div>
-              <span>Pedidos</span>
-              <strong>{vendasDoMes.length}</strong>
+            <div className="highlight-buttons">
+              <button type="button" className="btn btn-secondary" onClick={handleAbrirDetalhes}>
+                Ver pedidos do mês
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleGerarOnePager}>
+                Gerar One-Pager
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="partner-summary">
-          {resumoParceiros.map(parceiro => (
-            <div key={parceiro.parceiro} className="partner-card">
-              <span className="partner-label">{formatarNomeParceiro(parceiro.parceiro)}</span>
-              <span className="partner-value">{formatarMoeda(parceiro.receita)}</span>
-              <span className="partner-sub">{parceiro.pedidos} pedido{parceiro.pedidos !== 1 ? 's' : ''}</span>
-            </div>
-          ))}
+        <div className="highlight-metrics">
+          <div>
+            <span>Receita</span>
+            <strong>{formatarMoeda(receitaMesSelecionado)}</strong>
+          </div>
+          <div>
+            <span>Pontos</span>
+            <strong>{formatarPontuacao(pontosMesSelecionado)}</strong>
+          </div>
+          <div>
+            <span>Pedidos</span>
+            <strong>{totalPedidosVisao}</strong>
+          </div>
         </div>
+
+        <div className="partner-summary">
+          {resumoParceiros.map(parceiro => {
+            const ativo = visaoParceiro !== 'TODOS' && visaoParceiro === parceiro.parceiro;
+            return (
+              <div key={parceiro.parceiro} className={`partner-card ${ativo ? 'ativo' : ''}`}>
+                <span className="partner-label">{formatarNomeParceiro(parceiro.parceiro)}</span>
+                <span className="partner-value">{formatarMoeda(parceiro.receita)}</span>
+                <span className="partner-sub">{parceiro.pedidos} pedido{parceiro.pedidos !== 1 ? 's' : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {alertas.length > 0 && (
+          <div className="alerts-panel">
+            {alertas.map((alerta, index) => (
+              <div key={`alerta-${index}`} className={`alert-chip ${alerta.tipo}`}>
+                <AlertCircle size={16} />
+                <span>{alerta.mensagem}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="categories-grid">
@@ -494,6 +669,272 @@ export default function Dashboard({ resultado, vendas }: DashboardProps) {
           </div>
         </div>
       </div>
+    </div>
+      <PainelDetalhesMensais
+        aberto={detalhesMensaisAbertos}
+        onFechar={() => setDetalhesMensaisAbertos(false)}
+        nomeMes={nomeMesSelecionado}
+        parceiroVisao={visaoParceiro}
+        vendas={vendasDoMesFiltradas}
+      />
+
+      <OnePagerResumo
+        periodoTexto={periodoTexto}
+        classificacao={classificacao}
+        bonusPercentual={bonusPercentual}
+        pontuacaoMedia={pontuacaoMedia}
+        pontuacaoTotalCiclo={pontuacaoTotalCiclo}
+        nomeMesSelecionado={nomeMesSelecionado}
+        parceiroVisaoLabel={parceiroVisaoLabel}
+        receitaMesSelecionado={receitaMesSelecionado}
+        pontosMesSelecionado={pontosMesSelecionado}
+        totalPedidosMes={totalPedidosVisao}
+        categorias={categoriasResumo}
+        parceirosMensal={resumoParceiros}
+        parceirosCiclo={resumoParceirosCiclo}
+        alertas={alertas}
+      />
+    </>
+  );
+}
+
+interface PainelDetalhesMensaisProps {
+  aberto: boolean;
+  onFechar: () => void;
+  nomeMes: string;
+  parceiroVisao: VisaoParceiro;
+  vendas: RegistroVenda[];
+}
+
+function PainelDetalhesMensais({ aberto, onFechar, nomeMes, parceiroVisao, vendas }: PainelDetalhesMensaisProps) {
+  const grupos = useMemo(() => {
+    const mapa = new Map<RegistroVenda['torre'], { titulo: string; torre: RegistroVenda['torre']; total: number; pedidos: RegistroVenda[] }>();
+
+    vendas.forEach(venda => {
+      if (!mapa.has(venda.torre)) {
+        mapa.set(venda.torre, { titulo: TORRE_LABELS[venda.torre], torre: venda.torre, total: 0, pedidos: [] });
+      }
+      const grupo = mapa.get(venda.torre)!;
+      grupo.total += venda.valorBrutoSN;
+      grupo.pedidos.push(venda);
+    });
+
+    return Array.from(mapa.values()).sort((a, b) => b.total - a.total);
+  }, [vendas]);
+
+  const totalReceita = useMemo(() => vendas.reduce((acc, venda) => acc + venda.valorBrutoSN, 0), [vendas]);
+
+  return (
+    <div className={`monthly-details-overlay ${aberto ? 'ativo' : ''}`} aria-hidden={!aberto}>
+      <div className="monthly-details-backdrop" onClick={onFechar} role="presentation" />
+      <div className="monthly-details-panel glass-card">
+        <div className="monthly-details-header">
+          <div>
+            <h2>Pedidos de {nomeMes}</h2>
+            <p>
+              Visão {parceiroVisao === 'TODOS' ? 'consolidada' : `de ${obterRotuloParceiro(parceiroVisao)}`} · {vendas.length} pedido{vendas.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={onFechar}>
+            Fechar
+          </button>
+        </div>
+
+        {vendas.length === 0 ? (
+          <div className="monthly-details-empty">
+            <AlertCircle size={32} />
+            <p>Nenhum pedido encontrado para os filtros selecionados.</p>
+          </div>
+        ) : (
+          <div className="monthly-details-body">
+            {grupos.map(grupo => (
+              <section key={grupo.torre} className="monthly-details-group">
+                <div className="group-header">
+                  <h3>{grupo.titulo}</h3>
+                  <div className="group-totals">
+                    <span>{grupo.pedidos.length} pedido{grupo.pedidos.length !== 1 ? 's' : ''}</span>
+                    <strong>{formatarMoeda(grupo.total)}</strong>
+                  </div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Pedido SN</th>
+                      <th>Cliente</th>
+                      <th>Produto</th>
+                      <th>Parceiro</th>
+                      <th>Data</th>
+                      <th>Receita</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grupo.pedidos.map(pedido => (
+                      <tr key={pedido.id}>
+                        <td>{pedido.pedidoSN}</td>
+                        <td>
+                          <span className="cliente">{pedido.nomeCliente}</span>
+                          <span className="cnpj">{pedido.cnpj}</span>
+                        </td>
+                        <td>{pedido.produto}</td>
+                        <td>{formatarNomeParceiro(pedido.parceiro)}</td>
+                        <td>{pedido.dataAtivacao.toLocaleDateString('pt-BR')}</td>
+                        <td>{formatarMoeda(pedido.valorBrutoSN)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ))}
+          </div>
+        )}
+
+        <div className="monthly-details-footer">
+          <span>Total do painel</span>
+          <strong>{formatarMoeda(totalReceita)}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface OnePagerResumoProps {
+  periodoTexto: string;
+  classificacao: ResultadoCiclo['classificacao'];
+  bonusPercentual: number;
+  pontuacaoMedia: number;
+  pontuacaoTotalCiclo: number;
+  nomeMesSelecionado: string;
+  parceiroVisaoLabel: string;
+  receitaMesSelecionado: number;
+  pontosMesSelecionado: number;
+  totalPedidosMes: number;
+  categorias: CategoriaResumo[];
+  parceirosMensal: { parceiro: RegistroVenda['parceiro']; receita: number; pedidos: number }[];
+  parceirosCiclo: { parceiro: RegistroVenda['parceiro']; receita: number; pedidos: number }[];
+  alertas: AlertaDashboard[];
+}
+
+function OnePagerResumo({
+  periodoTexto,
+  classificacao,
+  bonusPercentual,
+  pontuacaoMedia,
+  pontuacaoTotalCiclo,
+  nomeMesSelecionado,
+  parceiroVisaoLabel,
+  receitaMesSelecionado,
+  pontosMesSelecionado,
+  totalPedidosMes,
+  categorias,
+  parceirosMensal,
+  parceirosCiclo,
+  alertas
+}: OnePagerResumoProps) {
+  return (
+    <div className="one-pager" id="one-pager">
+      <header className="one-pager-header">
+        <h1>Certificação Especialistas · One Pager</h1>
+        <span>{periodoTexto}</span>
+      </header>
+
+      <section className="one-pager-overview">
+        <div className="one-pager-card">
+          <span>Classificação atual</span>
+          <strong>{getNomeClassificacao(classificacao)}</strong>
+          <small>Bônus {bonusPercentual}%</small>
+        </div>
+        <div className="one-pager-card">
+          <span>Pontuação média</span>
+          <strong>{formatarPontuacao(pontuacaoMedia)}</strong>
+          <small>Total ciclo {formatarPontuacao(pontuacaoTotalCiclo)}</small>
+        </div>
+        <div className="one-pager-card">
+          <span>Visão mensal</span>
+          <strong>{nomeMesSelecionado}</strong>
+          <small>{parceiroVisaoLabel}</small>
+        </div>
+      </section>
+
+      <section className="one-pager-metrics">
+        <div>
+          <span>Receita do mês</span>
+          <strong>{formatarMoeda(receitaMesSelecionado)}</strong>
+        </div>
+        <div>
+          <span>Pontos gerados</span>
+          <strong>{formatarPontuacao(pontosMesSelecionado)}</strong>
+        </div>
+        <div>
+          <span>Pedidos analisados</span>
+          <strong>{totalPedidosMes}</strong>
+        </div>
+      </section>
+
+      <section className="one-pager-categorias">
+        <h2>Receita por categoria</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Categoria</th>
+              <th>Receita</th>
+              <th>Pontos</th>
+              <th>Próxima faixa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categorias.map(categoria => (
+              <tr key={categoria.chave}>
+                <td>{categoria.titulo}</td>
+                <td>{formatarMoeda(categoria.receita)}</td>
+                <td>{formatarPontuacao(categoria.pontos)}</td>
+                <td>
+                  {categoria.proximaFaixa
+                    ? `${categoria.proximaFaixa.faixa} · faltam ${formatarMoeda(categoria.faltaParaProxima)}`
+                    : 'Faixa máxima'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="one-pager-parceiros">
+        <div>
+          <h2>Parceiros no mês</h2>
+          <ul>
+            {parceirosMensal.map(parceiro => (
+              <li key={`mensal-${parceiro.parceiro}`}>
+                <span>{formatarNomeParceiro(parceiro.parceiro)}</span>
+                <strong>{formatarMoeda(parceiro.receita)}</strong>
+                <small>{parceiro.pedidos} pedido{parceiro.pedidos !== 1 ? 's' : ''}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h2>Parceiros no ciclo</h2>
+          <ul>
+            {parceirosCiclo.map(parceiro => (
+              <li key={`ciclo-${parceiro.parceiro}`}>
+                <span>{formatarNomeParceiro(parceiro.parceiro)}</span>
+                <strong>{formatarMoeda(parceiro.receita)}</strong>
+                <small>{parceiro.pedidos} pedido{parceiro.pedidos !== 1 ? 's' : ''}</small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {alertas.length > 0 && (
+        <section className="one-pager-alertas">
+          <h2>Avisos & Cenários</h2>
+          <ul>
+            {alertas.map((alerta, index) => (
+              <li key={`alerta-onepager-${index}`}>{alerta.mensagem}</li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

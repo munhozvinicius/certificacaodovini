@@ -11,7 +11,14 @@ export type Classificacao =
 
 export type TipoVenda = 'VENDA' | 'MIGRACAO';
 
-export type ParceiroVivo = 'JCL' | 'TECH' | 'SAFE_TI';
+export const PARCEIROS_VIVO = ['JLC_TECH', 'SAFE_TI'] as const;
+
+export type ParceiroVivo = (typeof PARCEIROS_VIVO)[number];
+
+export const PARCEIRO_LABELS: Record<ParceiroVivo, string> = {
+  JLC_TECH: 'JLC Tech',
+  SAFE_TI: 'Safe TI'
+};
 
 export type AreaAtuacao = 'DENTRO' | 'FORA';
 

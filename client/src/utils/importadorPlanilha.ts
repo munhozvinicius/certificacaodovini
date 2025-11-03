@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { RegistroVenda, TipoVenda, ParceiroVivo, AreaAtuacao } from '../types/certification';
+import { normalizarParceiroValor } from './parceiros';
 
 /**
  * Identifica a categoria do produto baseado no nome
@@ -81,13 +82,7 @@ export function identificarCategoriaProduto(produto: string):
  * Identifica o parceiro Vivo baseado no texto
  */
 export function identificarParceiro(parceiro: string): ParceiroVivo {
-  const parceiroLower = parceiro.toLowerCase();
-
-  if (parceiroLower.includes('jcl')) return 'JCL';
-  if (parceiroLower.includes('tech')) return 'TECH';
-  if (parceiroLower.includes('safe') || parceiroLower.includes('ti')) return 'SAFE_TI';
-
-  return 'JCL'; // Default
+  return normalizarParceiroValor(parceiro);
 }
 
 /**

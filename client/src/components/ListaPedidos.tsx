@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, DollarSign, Trash2, CheckCircle2, XCircle, Filter } from 'lucide-react';
-import type { RegistroVenda, ParceiroVivo } from '../types/certification';
+import type { RegistroVenda } from '../types/certification';
+import { PARCEIRO_LABELS } from '../types/certification';
+import { VISAO_PARCEIRO_OPCOES, type VisaoParceiro } from '../utils/parceiros';
 import { formatarMoeda } from '../utils/calculoCertificacao';
 import { normalizarValor } from '../utils/importadorPlanilha';
 import './ListaPedidos.css';
@@ -15,7 +17,7 @@ type CampoEditavel =
   | 'nomeRede'
   | 'parceiro';
 
-type ParceiroFiltro = 'TODOS' | ParceiroVivo;
+type ParceiroFiltro = VisaoParceiro;
 
 interface ListaPedidosProps {
   vendas: RegistroVenda[];
@@ -34,13 +36,6 @@ const CATEGORIAS_LABEL: Record<RegistroVenda['categoria'], string> = {
   NOVOS_PRODUTOS: 'Novos Produtos',
   LOCACAO_EQUIPAMENTOS: 'Locação de Equipamentos',
   LICENCAS: 'Licenças'
-};
-
-const PARCEIROS_LABEL: Record<ParceiroFiltro, string> = {
-  TODOS: 'Todos',
-  JCL: 'JLC',
-  SAFE_TI: 'SAFE/TI',
-  TECH: 'Tech'
 };
 
 function formatarValorEntrada(valor: number): string {
@@ -132,14 +127,14 @@ export default function ListaPedidos({
           </div>
 
           <div className="filtro-parceiro">
-            {(Object.keys(PARCEIROS_LABEL) as ParceiroFiltro[]).map(parceiro => (
+            {VISAO_PARCEIRO_OPCOES.map(parceiro => (
               <button
-                key={parceiro}
+                key={parceiro.valor}
                 type="button"
-                className={`filtro-botao ${parceiroFiltro === parceiro ? 'ativo' : ''}`}
-                onClick={() => setParceiroFiltro(parceiro)}
+                className={`filtro-botao ${parceiroFiltro === parceiro.valor ? 'ativo' : ''}`}
+                onClick={() => setParceiroFiltro(parceiro.valor)}
               >
-                {PARCEIROS_LABEL[parceiro]}
+                {parceiro.label}
               </button>
             ))}
           </div>
@@ -227,12 +222,11 @@ export default function ListaPedidos({
                           value={venda.parceiro}
                           onChange={(event) => onEditar?.(venda.id, 'parceiro', event.target.value)}
                         >
-                          <option value="JCL">JLC</option>
-                          <option value="SAFE_TI">SAFE/TI</option>
-                          <option value="TECH">Tech</option>
-                        </select>
-                      ) : (
-                        <span className="badge badge-parceiro">{PARCEIROS_LABEL[venda.parceiro]}</span>
+                        <option value="JLC_TECH">{PARCEIRO_LABELS.JLC_TECH}</option>
+                        <option value="SAFE_TI">{PARCEIRO_LABELS.SAFE_TI}</option>
+                      </select>
+                    ) : (
+                        <span className="badge badge-parceiro">{PARCEIRO_LABELS[venda.parceiro]}</span>
                       )}
                     </td>
                     <td data-title="Data">
