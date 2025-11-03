@@ -168,37 +168,51 @@ export function normalizarValor(valor: any): number {
 
 /**
  * Normaliza data de diferentes formatos
+ * IMPORTANTE: Sempre interpreta no formato brasileiro DD/MM/YYYY
  */
 export function normalizarData(data: any): Date {
-  if (data instanceof Date) return data;
+  // Se já é Date, retorna
+  if (data instanceof Date && !isNaN(data.getTime())) {
+    console.log(`[DEBUG DATA] Date object recebido: ${data.toISOString()}`);
+    return data;
+  }
 
   if (typeof data === 'string') {
-    // Tenta diferentes formatos de data
-    // DD/MM/YYYY
-    const regexBR = /(\d{2})\/(\d{2})\/(\d{4})/;
-    const matchBR = data.match(regexBR);
+    // Remove espaços
+    const dataLimpa = data.trim();
+
+    // Formato DD/MM/YYYY (brasileiro)
+    const regexBR = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+    const matchBR = dataLimpa.match(regexBR);
     if (matchBR) {
       const [, dia, mes, ano] = matchBR;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      const dataResultado = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      console.log(`[DEBUG DATA] String "${data}" → DD/MM/YYYY → ${dataResultado.toLocaleDateString('pt-BR')}`);
+      return dataResultado;
     }
 
-    // YYYY-MM-DD
-    const regexISO = /(\d{4})-(\d{2})-(\d{2})/;
-    const matchISO = data.match(regexISO);
+    // Formato YYYY-MM-DD (ISO)
+    const regexISO = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const matchISO = dataLimpa.match(regexISO);
     if (matchISO) {
       const [, ano, mes, dia] = matchISO;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      const dataResultado = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      console.log(`[DEBUG DATA] String "${data}" → ISO → ${dataResultado.toLocaleDateString('pt-BR')}`);
+      return dataResultado;
     }
   }
 
   // Se for número (Excel serial date)
   if (typeof data === 'number') {
-    // Excel usa 1/1/1900 como base
+    // Excel usa 1/1/1900 como base (dia 1 = 1/1/1900)
     const excelEpoch = new Date(1899, 11, 30);
     const msPerDay = 24 * 60 * 60 * 1000;
-    return new Date(excelEpoch.getTime() + data * msPerDay);
+    const dataResultado = new Date(excelEpoch.getTime() + data * msPerDay);
+    console.log(`[DEBUG DATA] Número ${data} (Excel serial) → ${dataResultado.toLocaleDateString('pt-BR')}`);
+    return dataResultado;
   }
 
+  console.warn(`[DEBUG DATA] Formato não reconhecido: ${data} (tipo: ${typeof data})`);
   return new Date(); // Default: data atual
 }
 
@@ -340,7 +354,8 @@ export function importarPlanilhaExcel(
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+        // cellDates: false - força leitura de datas como strings para evitar conversão errada
+        const workbook = XLSX.read(data, { type: 'binary', cellDates: false, raw: false });
 
         // Pega a primeira planilha
         const sheetName = workbook.SheetNames[0];
