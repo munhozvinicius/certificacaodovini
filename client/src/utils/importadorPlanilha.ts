@@ -22,14 +22,17 @@ export function identificarCategoriaProduto(produto: string):
     return 'DADOS_AVANCADOS';
   }
 
-  // Voz Avançada + VVN: VVN, SIP, NUM, DDR, 0800
+  // Voz Avançada + VVN: VVN, SIP, NUM, DDR, 0800, VIVOSIP
   if (
     produtoLower.includes('vvn') ||
     produtoLower.includes('sip') ||
+    produtoLower.includes('vivosip') ||
+    produtoLower.includes('vivo sip') ||
     produtoLower.includes('num') ||
     produtoLower.includes('ddr') ||
     produtoLower.includes('0800')
   ) {
+    console.log(`[CATEGORIA] "${produto}" → VOZ_AVANCADA`);
     return 'VOZ_AVANCADA';
   }
 
@@ -78,72 +81,138 @@ export function identificarCategoriaProduto(produto: string):
 }
 
 /**
- * Identifica o parceiro Vivo baseado no texto
+ * Identifica o parceiro Vivo baseado no texto de NM_REDE
  */
 export function identificarParceiro(parceiro: string): ParceiroVivo {
-  const parceiroLower = parceiro.toLowerCase();
+  const parceiroUpper = parceiro.toUpperCase().trim();
 
-  if (parceiroLower.includes('jcl')) return 'JCL';
-  if (parceiroLower.includes('tech')) return 'TECH';
-  if (parceiroLower.includes('safe') || parceiroLower.includes('ti')) return 'SAFE_TI';
+  // SAFE-TI ou SAFE TI
+  if (parceiroUpper.includes('SAFE')) return 'SAFE_TI';
 
-  return 'JCL'; // Default
+  // JLC TECH (corrigido - estava como JCL)
+  if (parceiroUpper.includes('JLC') || parceiroUpper.includes('TECH')) return 'TECH';
+
+  return 'SAFE_TI'; // Default
+}
+
+/**
+ * Normaliza CNPJ de diferentes formatos, incluindo notação científica do Excel
+ * Exemplo: 4,92681E+13 -> 49268125000196
+ */
+export function normalizarCNPJ(cnpj: any): string {
+  if (!cnpj) return '';
+
+  // Se for número (notação científica do Excel)
+  if (typeof cnpj === 'number') {
+    // Converte para string sem notação científica
+    const cnpjStr = cnpj.toFixed(0);
+    console.log(`[DEBUG] CNPJ científico: ${cnpj} → ${cnpjStr}`);
+    return cnpjStr.padStart(14, '0'); // CNPJ tem 14 dígitos
+  }
+
+  // Se for string
+  if (typeof cnpj === 'string') {
+    // Remove tudo que não é número
+    const apenasNumeros = cnpj.replace(/\D/g, '');
+    return apenasNumeros.padStart(14, '0');
+  }
+
+  return String(cnpj);
 }
 
 /**
  * Normaliza valor monetário de diferentes formatos
+ * IMPORTANTE: Excel armazena valores monetários como CENTAVOS (multiplicados por 100)
+ * Exemplo: R$ 1.300,00 vem como 130000 (centavos)
  */
 export function normalizarValor(valor: any): number {
-  if (typeof valor === 'number') return valor;
+  const valorOriginal = valor;
+
+  if (typeof valor === 'number') {
+    // Excel armazena valores monetários como centavos (multiplicado por 100)
+    // Exemplo: R$ 1.300,00 = 130000 centavos
+    const valorEmReais = valor / 100;
+    console.log(`[DEBUG] Valor numérico: ${valor} centavos → R$ ${valorEmReais.toFixed(2)}`);
+    return valorEmReais;
+  }
 
   if (typeof valor === 'string') {
     // Remove símbolos de moeda e espaços
     let valorLimpo = valor.replace(/[R$\s]/g, '');
-    // Substitui vírgula por ponto
-    valorLimpo = valorLimpo.replace(',', '.');
-    // Remove pontos de milhares (ex: 1.000.00 -> 1000.00)
-    valorLimpo = valorLimpo.replace(/\.(?=\d{3})/g, '');
+    console.log(`[DEBUG] Valor string: "${valorOriginal}" → Limpo: "${valorLimpo}"`);
+
+    // Detecta formato: se tem vírgula E ponto, vírgula é decimal (formato BR)
+    const temVirgula = valorLimpo.includes(',');
+    const temPonto = valorLimpo.includes('.');
+
+    if (temVirgula && temPonto) {
+      // Formato brasileiro: 1.234,56 -> remove pontos, vírgula vira ponto
+      valorLimpo = valorLimpo.replace(/\./g, '');
+      valorLimpo = valorLimpo.replace(',', '.');
+      console.log(`[DEBUG] Formato BR → "${valorLimpo}"`);
+    } else if (temVirgula) {
+      // Só vírgula: 1234,56 -> vírgula vira ponto
+      valorLimpo = valorLimpo.replace(',', '.');
+      console.log(`[DEBUG] Só vírgula → "${valorLimpo}"`);
+    }
 
     const numero = parseFloat(valorLimpo);
-    return isNaN(numero) ? 0 : numero;
+    const resultado = isNaN(numero) ? 0 : numero;
+    console.log(`[DEBUG] String parseada: R$ ${resultado.toFixed(2)}`);
+    return resultado;
   }
 
+  console.log(`[DEBUG] Valor não reconhecido: ${valorOriginal}`);
   return 0;
 }
 
 /**
  * Normaliza data de diferentes formatos
+ * IMPORTANTE: Sempre interpreta no formato brasileiro DD/MM/YYYY
  */
 export function normalizarData(data: any): Date {
-  if (data instanceof Date) return data;
+  // Se já é Date, retorna
+  if (data instanceof Date && !isNaN(data.getTime())) {
+    console.log(`[DEBUG DATA] Date object recebido: ${data.toISOString()}`);
+    return data;
+  }
 
   if (typeof data === 'string') {
-    // Tenta diferentes formatos de data
-    // DD/MM/YYYY
-    const regexBR = /(\d{2})\/(\d{2})\/(\d{4})/;
-    const matchBR = data.match(regexBR);
+    // Remove espaços
+    const dataLimpa = data.trim();
+
+    // Formato DD/MM/YYYY (brasileiro)
+    const regexBR = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+    const matchBR = dataLimpa.match(regexBR);
     if (matchBR) {
       const [, dia, mes, ano] = matchBR;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      const dataResultado = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      console.log(`[DEBUG DATA] String "${data}" → DD/MM/YYYY → ${dataResultado.toLocaleDateString('pt-BR')}`);
+      return dataResultado;
     }
 
-    // YYYY-MM-DD
-    const regexISO = /(\d{4})-(\d{2})-(\d{2})/;
-    const matchISO = data.match(regexISO);
+    // Formato YYYY-MM-DD (ISO)
+    const regexISO = /^(\d{4})-(\d{2})-(\d{2})$/;
+    const matchISO = dataLimpa.match(regexISO);
     if (matchISO) {
       const [, ano, mes, dia] = matchISO;
-      return new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      const dataResultado = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia));
+      console.log(`[DEBUG DATA] String "${data}" → ISO → ${dataResultado.toLocaleDateString('pt-BR')}`);
+      return dataResultado;
     }
   }
 
   // Se for número (Excel serial date)
   if (typeof data === 'number') {
-    // Excel usa 1/1/1900 como base
+    // Excel usa 1/1/1900 como base (dia 1 = 1/1/1900)
     const excelEpoch = new Date(1899, 11, 30);
     const msPerDay = 24 * 60 * 60 * 1000;
-    return new Date(excelEpoch.getTime() + data * msPerDay);
+    const dataResultado = new Date(excelEpoch.getTime() + data * msPerDay);
+    console.log(`[DEBUG DATA] Número ${data} (Excel serial) → ${dataResultado.toLocaleDateString('pt-BR')}`);
+    return dataResultado;
   }
 
+  console.warn(`[DEBUG DATA] Formato não reconhecido: ${data} (tipo: ${typeof data})`);
   return new Date(); // Default: data atual
 }
 
@@ -226,7 +295,7 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
   linhas.forEach(linha => {
     const produto = linha.DS_PRODUTO?.toLowerCase() || '';
     const pedidoSN = linha.PEDIDO_SN;
-    const cnpj = linha.NR_CNPJ;
+    const cnpj = normalizarCNPJ(linha.NR_CNPJ);
 
     if (produto.includes('ip dedicado')) {
       grupos.set(pedidoSN, {
@@ -249,7 +318,7 @@ function agruparPedidosIPDedicado(linhas: LinhaRawPlanilha[]): Map<string, Grupo
   // Agrupa produtos relacionados (Monitora Dados e IP Internet)
   linhas.forEach(linha => {
     const produto = linha.DS_PRODUTO?.toLowerCase() || '';
-    const cnpj = linha.NR_CNPJ;
+    const cnpj = normalizarCNPJ(linha.NR_CNPJ);
     const pedidoSN = linha.PEDIDO_SN;
 
     if (produto.includes('monitora dados') || produto.includes('ip internet')) {
@@ -285,7 +354,8 @@ export function importarPlanilhaExcel(
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+        // cellDates: false - força leitura de datas como strings para evitar conversão errada
+        const workbook = XLSX.read(data, { type: 'binary', cellDates: false, raw: false });
 
         // Pega a primeira planilha
         const sheetName = workbook.SheetNames[0];
@@ -293,6 +363,37 @@ export function importarPlanilhaExcel(
 
         // Converte para JSON
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as LinhaRawPlanilha[];
+
+        console.log(`\n========== INÍCIO DO PROCESSAMENTO ==========`);
+        console.log(`Total de linhas no arquivo: ${jsonData.length}`);
+
+        // Mostra as colunas disponíveis
+        if (jsonData.length > 0) {
+          const colunas = Object.keys(jsonData[0]);
+          console.log(`\n📋 COLUNAS DISPONÍVEIS (${colunas.length} colunas):`);
+          console.log(colunas.join(', '));
+        }
+
+        console.log(`\n📊 PRIMEIRAS 5 LINHAS (AMOSTRA COMPLETA):`);
+        jsonData.slice(0, 5).forEach((row, i) => {
+          console.log(`\n━━━━━━━━━━ LINHA ${i + 1} ━━━━━━━━━━`);
+          console.log(`  CNPJ: ${row.NR_CNPJ} (tipo: ${typeof row.NR_CNPJ})`);
+          console.log(`  Cliente: ${row.NM_CLIENTE}`);
+          console.log(`  Tipo: ${row.TP_SOLICITACAO}`);
+          console.log(`  Pedido: ${row.PEDIDO_SN}`);
+          console.log(`  Tipo Produto: ${row.TP_PRODUTO}`);
+          console.log(`  Desc Produto: ${row.DS_PRODUTO}`);
+          console.log(`  Valor Bruto: ${row.VL_BRUTO_SN} (tipo: ${typeof row.VL_BRUTO_SN})`);
+          console.log(`  Data RFB: ${row.DT_RFB}`);
+          console.log(`  Rede: ${row.NM_REDE}`);
+
+          // Mostra TODAS as colunas que têm "VL" ou "VALOR" no nome
+          Object.keys(row).forEach(key => {
+            if (key.toLowerCase().includes('vl') || key.toLowerCase().includes('valor')) {
+              console.log(`  [VALOR] ${key}: ${row[key]}`);
+            }
+          });
+        });
 
         // Agrupa pedidos de IP Dedicado
         const gruposIPDedicado = agruparPedidosIPDedicado(jsonData);
@@ -303,16 +404,30 @@ export function importarPlanilhaExcel(
         // Processa cada linha aplicando as regras corretas
         const vendas: RegistroVenda[] = [];
 
+        console.log(`\n🔍 PROCESSANDO ${jsonData.length} LINHAS...`);
+
         jsonData.forEach((row, index) => {
           const pedidoSN = row.PEDIDO_SN;
           const produto = row.DS_PRODUTO || '';
           const tipoSolicitacao = row.TP_SOLICITACAO || '';
+          const cliente = row.NM_CLIENTE || '';
+          const valorBruto = row.VL_BRUTO_SN || 0;
+          const parceiro = row.NM_REDE || '';
+
+          console.log(`\n[${index + 1}/${jsonData.length}] ${cliente} - ${produto}`);
+          console.log(`  Pedido: ${pedidoSN}, Tipo: ${tipoSolicitacao}, Valor: ${valorBruto}, Parceiro: ${parceiro}`);
 
           // Se não houver produto ou pedido, ignora
-          if (!produto || !pedidoSN) return;
+          if (!produto || !pedidoSN) {
+            console.log(`  ❌ SKIP: Produto ou pedido vazio`);
+            return;
+          }
 
           // Se já foi processado como parte de um grupo, pula
-          if (pedidosProcessados.has(pedidoSN)) return;
+          if (pedidosProcessados.has(pedidoSN)) {
+            console.log(`  ⏭️  SKIP: Já processado (agrupamento IP)`);
+            return;
+          }
 
           // Verifica se é IP Dedicado (pedido principal)
           if (gruposIPDedicado.has(pedidoSN)) {
@@ -321,11 +436,16 @@ export function importarPlanilhaExcel(
             // Marca todos os pedidos do grupo como processados
             grupo.pedidosRelacionados.forEach(p => pedidosProcessados.add(p.pedidoSN));
 
-            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
-            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
-                tipoSolicitacao.toLowerCase().includes('migra')) {
-              return; // Pula migrações
+            // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
+            if (!tipoSolicitacao.toLowerCase().includes('venda')) {
+              console.log(`  ❌ SKIP: Tipo não contém "VENDA" - Tipo: ${tipoSolicitacao}`);
+              return; // Pula apenas tipos que NÃO contêm "venda"
             }
+
+            console.log(`  ✅ ACEITO [GRUPO IP] - Valor Total: R$ ${grupo.valorTotal.toFixed(2)}`);
+            grupo.pedidosRelacionados.forEach(p => {
+              console.log(`     → ${p.pedidoSN}: ${p.produto} = R$ ${p.valor.toFixed(2)}`);
+            });
 
             // Cria registro agrupado
             vendas.push({
@@ -349,31 +469,57 @@ export function importarPlanilhaExcel(
           } else if (!isProdutoIPDedicado(produto)) {
             // Processa produtos normais (não relacionados a IP Dedicado)
 
-            // REGRA: Só considera VENDA (não MIGRAÇÃOVENDA)
-            if (!tipoSolicitacao.toLowerCase().includes('venda') ||
-                tipoSolicitacao.toLowerCase().includes('migra')) {
-              return; // Pula migrações
+            // REGRA: Aceita VENDA e MIGRAÇÃOVENDA (qualquer tipo com "VENDA")
+            if (!tipoSolicitacao.toLowerCase().includes('venda')) {
+              console.log(`  ❌ SKIP: Tipo não contém "VENDA" - Tipo: ${tipoSolicitacao}`);
+              return; // Pula apenas tipos que NÃO contêm "venda"
             }
+
+            const valorNormalizado = normalizarValor(valorBruto);
+            const categoria = identificarCategoriaProduto(produto);
+            console.log(`  ✅ ACEITO [${categoria}] - Valor: R$ ${valorNormalizado.toFixed(2)}`);
 
             vendas.push({
               id: `venda-${mapeamento.torre}-${Date.now()}-${index}`,
               pedidoSN,
               dataAtivacao: normalizarData(row.DT_RFB),
-              valorBrutoSN: normalizarValor(row.VL_BRUTO_SN || 0),
+              valorBrutoSN: valorNormalizado,
               tipoVenda: identificarTipoVenda(tipoSolicitacao),
               tipoSolicitacao,
               parceiro: identificarParceiro(row.NM_REDE || ''),
               produto,
               tipoProduto: row.TP_PRODUTO || '',
-              categoria: identificarCategoriaProduto(produto),
-              cnpj: row.NR_CNPJ,
+              categoria,
+              cnpj: normalizarCNPJ(row.NR_CNPJ),
               nomeCliente: row.NM_CLIENTE,
               nomeRede: row.NM_REDE,
               areaAtuacao: 'DENTRO',
               torre: mapeamento.torre
             });
+          } else {
+            console.log(`  ⏭️  SKIP: Produto relacionado a IP mas não é principal (será agrupado)`);
           }
         });
+
+        console.log(`\n`);
+        console.log(`========== RESUMO FINAL ==========`);
+        console.log(`📊 Total de vendas processadas: ${vendas.length}`);
+        console.log(`💰 Receita total: R$ ${vendas.reduce((acc, v) => acc + v.valorBrutoSN, 0).toFixed(2)}`);
+
+        // Agrupa por categoria
+        const porCategoria = vendas.reduce((acc, v) => {
+          acc[v.categoria] = (acc[v.categoria] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log(`📦 Por categoria:`, porCategoria);
+
+        // Agrupa por parceiro
+        const porParceiro = vendas.reduce((acc, v) => {
+          acc[v.parceiro] = (acc[v.parceiro] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log(`🤝 Por parceiro:`, porParceiro);
+        console.log(`==================================\n`);
 
         resolve(vendas);
       } catch (error) {
